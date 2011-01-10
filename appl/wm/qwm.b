@@ -136,7 +136,7 @@ init(ctxt: ref Context, args: list of string)
 	if(ctxt != nil)
 		fail("already have draw context");
 
-	sys->bind("#s", "/chan", Sys->MREPL);
+	sys->bind("#s", "/chan", Sys->MBEFORE);
 	fiorect := sys->file2chan("/chan", "wmrect");
 	if(fiorect == nil)
 		fail(sprint("/chan/wmrect: %r"));
@@ -472,7 +472,9 @@ ptrmoving(p: ref Pointer)
 	moving = nil;
 	c := cols[w.colindex];
 	(oc, ow) := winfindpt(p.xy);
-	if(abs(p.xy.x-pt.x) < 10 && abs(p.xy.y-pt.y) < 10) {
+	if(oc == nil) {
+		# nothing
+	} else if(abs(p.xy.x-pt.x) < 10 && abs(p.xy.y-pt.y) < 10) {
 		if(c.mode == Mstack)
 			case optr.buttons {
 			B1 =>	winbigger(c, w, pt, 1, c.r.dy()/6);
@@ -542,7 +544,9 @@ ptrtag(p: ref Pointer)
 	say(sprint("release of %d at %d,%d", tagptr.buttons, tagptr.xy.x, tagptr.xy.y));
 	(x, nil) := winfindpt(tagptr.xy);
 	(y, nil) := winfindpt(p.xy);
-	if(colbox(x).contains(tagptr.xy)) {
+	if(y == nil) {
+		# nothing
+	} else if(colbox(x).contains(tagptr.xy)) {
 		if(x == y || x.visindex == y.visindex+1) {
 			if(colbox(x).contains(p.xy))
 				case tagptr.buttons {
