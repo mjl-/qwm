@@ -1,0 +1,67 @@
+# status
+
+quite usable, but needs some improvement.
+
+
+# intro
+
+qwm is a window manager for inferno, an alternative to inferno's wm/wm.
+its arrangement of stacks of windows in columns is similar to acme.
+
+the major difference is that qwm always has 9 columns (1-9, similar to
+dwm), and that visibility of a column can be toggled.  this makes
+columns similar to "work spaces" in other window managers.  by default
+only column 1 is visible.
+
+columns can be moved and resized by clicking or dragging the box in
+the upper left corner.  windows can be moved and resized by dragging
+the titlebar and clicking its buttons.  windows and columns can also
+be manipulated by keyboard commands.  these commands are single
+characters preceded by a ^q, control-q.  key commands exist for
+creating a new window, moving a window between columns, resizing
+windows, and resizing columns and making columns visible or hidden.
+
+see the manual page for details.
+
+
+# install
+
+make sure $ROOT is set.  now "mk install" to compile and install the
+files.
+
+when building from within inferno, insert SYSHOST=Inferno and ROOT=
+in the mk invocations to override the values in the mkconfig.
+
+if you want to use button2 and button3 clicks on title bars of
+windows, apply the patch titlebar.b.diff to /appl/lib/titlebar.b, and
+compile and install that module.  this module is used by applications
+to draw the title bar bind mouse events to it.
+
+it's also advisable to "bind -b /icons/tinytk /icons/tk", to make the
+title bars a bit less big.
+
+
+# latest version
+
+the latest version can be found at:
+
+    http://www.ueber.net/code/r/qwm
+
+
+# licence & author
+
+all files are in the public domain.  this code has been written by
+mechiel lukkien, reachable at mechiel@ueber.net.
+
+
+# todo
+
+- make it possible to run in existing draw context
+- better window placement
+- find out when we get wctlc recvs?  and handle them.  it seems nothing uses wmcontext.wctl.
+- handle "delete" fioctl.write's?  what to do with them?
+- when moving columns off-screen, don't resize their windows, only change their origin?
+- for Msingle, use window ordering to show the right window?  requires Refbackup i think
+- multiple windows/tags for a "client"?  eg for popup.  how do clients make new images?  why don't they close the windows themselves?
+- floating mode?
+- allow user to edit text in tag, with b2 for execute?

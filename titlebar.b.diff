@@ -1,0 +1,21 @@
+diff -r 4d718d2213b2 appl/lib/titlebar.b
+--- a/appl/lib/titlebar.b	Mon Nov 08 09:46:52 2010 -0800
++++ b/appl/lib/titlebar.b	Sun Jan 09 23:32:54 2011 +0100
+@@ -14,11 +14,15 @@
+ 	"button .Wm_t.e -bitmap exit.bit -command {send wm_title exit} -takefocus 0",
+ 	"pack .Wm_t.e -side right",
+ 	"bind .Wm_t <Button-1> {send wm_title move %X %Y}",
+-	"bind .Wm_t <Double-Button-1> {send wm_title lower .}",
++	"bind .Wm_t <Button-2> {send wm_title move %X %Y}",  # for qwm
++	"bind .Wm_t <Button-3> {send wm_title move %X %Y}",  # for qwm
++#	"bind .Wm_t <Double-Button-1> {send wm_title lower .}",  # for qwm
+ 	"bind .Wm_t <Motion-Button-1> {}",
+ 	"bind .Wm_t <Motion> {}",
+ 	"bind .Wm_t.title <Button-1> {send wm_title move %X %Y}",
+-	"bind .Wm_t.title <Double-Button-1> {send wm_title lower .}",
++	"bind .Wm_t.title <Button-2> {send wm_title move %X %Y}",  # for qwm
++	"bind .Wm_t.title <Button-3> {send wm_title move %X %Y}",  # for qwm
++#	"bind .Wm_t.title <Double-Button-1> {send wm_title lower .}",  # for qwm
+ 	"bind .Wm_t.title <Motion-Button-1> {}",
+ 	"bind .Wm_t.title <Motion> {}",
+ 	"bind . <FocusIn> {.Wm_t configure -bg blue;"+
