@@ -6,8 +6,6 @@ qwm \- window manager
 [
 .B -d
 ] [
-.BI -f " font"
-] [
 .BI -t " tag cmd"
 ]
 [
@@ -65,12 +63,6 @@ It is typically used to set up the namespace and start commands.
 .TP
 .B -d
 Enable debug prints.
-.TP
-.BI -f " font"
-Use
-.I font
-for the tag bar.
-If none is specified, ``*default*'' is used.
 .TP
 .BI -t " name command"
 Add

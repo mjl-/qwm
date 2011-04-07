@@ -31,7 +31,7 @@ Tagselcolor: con Draw->Palegreyblue;
 
 dflag := 0;
 tagcmds: list of ref (string, string);
-fontname: string;
+fontname: con "qwm./fonts/pelm/unicode.8.font";  # qwm.-prefix is for fontsrv
 
 Mstack, Msingle: con iota;	# Col.mode
 modes := array[] of {"stack", "single"};
@@ -115,11 +115,10 @@ init(ctxt: ref Context, args: list of string)
 	sh = load Sh Sh->PATH;
 
 	arg->init(args);
-	arg->setusage(arg->progname()+" [-d] [-f font] [-t tag cmd] [profile]");
+	arg->setusage(arg->progname()+" [-d] [-t tag cmd] [profile]");
 	while((c := arg->opt()) != 0)
 		case c {
 		'd' =>	dflag++;
-		'f' =>	fontname = arg->arg();
 		't' =>
 			tag := arg->arg();
 			cmd := arg->arg();
@@ -155,9 +154,11 @@ init(ctxt: ref Context, args: list of string)
 	wmc := chan of (string, chan of (string, ref Wmcontext));
 	drawctxt = ref Context(disp, scr, wmc);
 
+	if(profile != nil)
+		run(list of {"sh", "-n", profile});
+
 	cols = array[9] of ref Col;
-	if(fontname != nil)
-		tagfont = Font.open(disp, fontname);
+	tagfont = Font.open(disp, fontname);
 	if(tagfont == nil)
 		tagfont = Font.open(disp, "*default*");
 	tagsrect = scr.image.r;
@@ -191,8 +192,6 @@ init(ctxt: ref Context, args: list of string)
 	spawn ptr(ptrc, ppidc := chan of int);
 	<-ppidc;
 
-	if(profile != nil)
-		spawn run(list of {"sh", "-n", profile});
 	prevptr = ref Pointer;
 	prevptr.xy = scr.image.r.min;
 
