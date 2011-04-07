@@ -641,7 +641,7 @@ key(x: int)
 	'H' or
 	'L' =>
 		c := coladj(x=='L');
-		if(c != nil) {
+		if(c != nil && col.win != nil) {
 			winmovecol(col.win, col, c, ptrprev.xy.y-tagsrect.dy());
 			ptrensure(col, col.win);
 		}
