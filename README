@@ -58,7 +58,6 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 - when moving windows between columns, the title bar can easily become very small, we'll have to move windows around to keep at least Winmin height for the moved window.
 - bug: menu's from wm/sh always show in upper-left corner, full width.
-- bug: unhiding a window while in single mode shows the windows as if it was in stack mode.  it should show the unhidden window in place of the current window.
 
 - when moving columns off-screen, don't resize their windows, only change their origin?
 - for Msingle, use window ordering to show the right window?  requires Refbackup i think

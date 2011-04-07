@@ -1406,7 +1406,9 @@ winunhide(c: ref Col, w: ref Win)
 		say("toggling col");
 		coltoggle(c);
 	}
-	if(w.wantr.dy() <= 2*Winmin) {
+	if(c.mode == Msingle) {
+		winsingle(c, w);
+	} else if(w.wantr.dy() <= 2*Winmin) {
 		want := c.r.dy()/4;
 		h := getheights(c);
 		taken := scavenge(want, Winmin, w.index+1, len c.wins, 1, h);
