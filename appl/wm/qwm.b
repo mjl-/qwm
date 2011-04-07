@@ -658,56 +658,8 @@ key(x: int)
 		w := winadj(x=='j');
 		if(w != nil)
 			focus(col, w, 1);
-	'<' =>
-		i := col.visindex;
-		if(i == 0)
-			return;
-		want := drawctxt.screen.image.r.dx()/8;
-		w := getviswidths();
-		take := scavenge(want, Colmin, 0, i, 1, w);
-		if(take != 0) {
-			w[i] += take;
-			setviswidths(w);
-			resize();
-			ptrensure(col, col.win);
-		}
-	'.' =>
-		i := col.visindex;
-		if(i == len vis-1)
-			return;
-		want := drawctxt.screen.image.r.dx()/8;
-		w := getviswidths();
-		take := scavenge(want, Colmin, i+1, len vis, 1, w);
-		if(take != 0) {
-			w[i] += take;
-			setviswidths(w);
-			resize();
-			ptrensure(col, col.win);
-		}
-	'>' =>
-		want := drawctxt.screen.image.r.dx()/8;
-		take := min(want, max(0, col.r.dx()-Colmin));
-		i := col.visindex;
-		if(i-1 < 0 || take == 0)
-			return;
-		w := getviswidths();
-		w[i] -= take;
-		w[i-1] += take;
-		setviswidths(w);
-		resize();
-		ptrensure(col, col.win);
-	',' =>
-		want := drawctxt.screen.image.r.dx()/8;
-		take := min(want, max(0, col.r.dx()-Colmin));
-		i := col.visindex;
-		if(i+1 >= len vis || take == 0)
-			return;
-		w := getviswidths();
-		w[i] -= take;
-		w[i+1] += take;
-		setviswidths(w);
-		resize();
-		ptrensure(col, col.win);
+	'o' =>
+		colbigger(col);
 	'u' =>
 		if(col.mode == Mstack && col.win != nil)
 			winmax(col, col.win);

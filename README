@@ -58,7 +58,7 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 - with buttons down moving over other window, don't change focus to that window.
 - when moving windows between columns, the title bar can easily become very small, we'll have to move windows around to keep at least Winmin height for the moved window.
-- find something better for resizing columns, perhaps a "make col bigger" key and let it be smarter, gets rid of [<>,.].
+- make "col bigger" smarter.  where it takes the space from is weird.
 - make heuristics for which window gets screen size after one closes different.
 - perhaps make [jk] give the new window the same amount of height as a 'i'?
 - bug: menu's from wm/sh always show in upper-left corner, full width.

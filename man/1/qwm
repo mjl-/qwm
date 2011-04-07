@@ -236,11 +236,8 @@ Make window bigger.
 .B u
 Make window as big as possible without hiding other windows's title bars.
 .TP
-.BR , " or " .
-Move right side of column to the left/right
-.TP
-.RB < " or " >
-Move left side of column to the left/right.
+.B o
+Make column bigger.
 
 .SH SOURCE
 /appl/wm/qwm.b
