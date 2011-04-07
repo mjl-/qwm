@@ -587,7 +587,7 @@ ptrtag(p: ref Pointer)
 		}
 	} else if((j = rectindex(x.tagcmds, tagptr.xy)) >= 0 && tagptr.buttons == B2) {
 		(nil, cmd) := *l2a(tagcmds)[j];
-		spawn run(list of {"sh", "-c", cmd});
+		spawn run(list of {"sh", "-nc", cmd});
 	} 
 	tagptr = nil;
 	drawtags();
