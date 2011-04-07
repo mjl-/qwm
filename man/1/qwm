@@ -187,8 +187,13 @@ Start new instance of wm/run.
 .B X
 Tell program to exit.
 .TP
-.B w
-Place focus on window that previously had focus.
+.B n
+Place focus on window that previously had focus, or was most recently created.
+.TP
+.B m
+Like
+.LR `n' ,
+but also make window as big as possible without hiding other windows's title bars.
 .TP
 .B q
 Restore previous column configuration (which columns were visible), and restore focus to the window at that time.
@@ -225,11 +230,11 @@ Set
 .I single
 mode for the column, and hide all other columns.
 .TP
-.B u
+.B i
 Make window bigger.
 .TP
-.B i
-Make window as big as possible without hiding other windows' title bars.
+.B u
+Make window as big as possible without hiding other windows's title bars.
 .TP
 .BR , " or " .
 Move right side of column to the left/right

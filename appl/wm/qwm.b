@@ -724,7 +724,8 @@ key(x: int)
 		}
 	'c' =>
 		spawn run0();
-	'w' =>
+	'n' or
+	'm' =>
 		(c, w) := winfindtag(otherwin);
 		if(w == nil)
 			return;
@@ -734,6 +735,10 @@ key(x: int)
 			cfgset(cfg);
 		}
 		focus(c, w, 1);
+		if(x == 'm' && col.mode == Mstack) {
+			winmax(col, col.win);
+			ptrensure(col, col.win);
+		}
 	}
 }
 
