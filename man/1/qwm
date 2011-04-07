@@ -15,22 +15,37 @@ qwm \- window manager
 ]
 .SH DESCRIPTION
 .I Qwm
-is a window manager.  Its arrangement of stacks of windows in columns is similar to that of acme.
+is a window manager.
+Its arrangement of stacks of windows in columns is similar to that of acme.
 .PP
 .I Qwm
-always has nine columns, 1-9.  Visibility of each column can be toggled.  This makes columns similar to ``work spaces'' in other window managers.  At least one column is always visible, by default only the first is visible.  Focus is always at a column, and if that column has windows, on a window.  The focus follows the mouse.  A column can be in
+always has nine columns, 1-9.
+Visibility of each column can be toggled.
+This makes columns similar to ``work spaces'' in other window managers.
+At least one column is always visible, by default only the first is visible.
+Focus is always at a column, and if that column has windows, on a window.
+The focus follows the mouse.
+A column can be in
 .I stack
 or
 .I single
-mode.  In single mode, only one window is visible at the time, taking up the full height of the column.  In stack mode, multiple windows can be visible at a time.
+mode.
+In single mode, only one window is visible at the time, taking up the full height of the column.
+In stack mode, multiple windows can be visible at a time.
 .PP
-Columns can be moved and resized by clicking or dragging the box in their upper left corner.  Windows can be moved and resized by dragging their title bar or clicking their buttons.  Windows and columns can also be manipulated by keyboard commands.  These commands are single characters preceded by a
+Columns can be moved and resized by clicking or dragging the box in their upper left corner.
+Windows can be moved and resized by dragging their title bar or clicking their buttons.
+Windows and columns can also be manipulated by keyboard commands.
+These commands are single characters preceded by a
 .BR ^q ,
-control-q.  Keys exist for creating new windows, moving windows between columns, resizing windows, and resizing columns and making columns visible or hidden.
+control-q.
+Keys exist for creating new windows, moving windows between columns, resizing windows, and resizing columns and making columns visible or hidden.
 .PP
-A new window is placed at an appropriate location.  In
+A new window is placed at an appropriate location.
+In
 .I single
-mode, it is the only window shown and receives focus.  In
+mode, it is the only window shown and receives focus.
+In
 .I stack
 mode, it is placed directly above the currently focused window, and does not receive focus.
 .PP
@@ -45,7 +60,8 @@ If
 .I profile
 is given on the command line, it is executed by the shell after
 .I qwm
-is started.  It is typically used to set up the namespace and start commands.
+is started.
+It is typically used to set up the namespace and start commands.
 .TP
 .B -d
 Enable debug prints.
@@ -53,12 +69,14 @@ Enable debug prints.
 .BI -f " font"
 Use
 .I font
-for the tag bar.  If none is specified, ``*default*'' is used.
+for the tag bar.
+If none is specified, ``*default*'' is used.
 .TP
 .BI -t " name command"
 Add
 .I name
-to the tag bar of each column.  When it is clicked with B2,
+to the tag bar of each column.
+When it is clicked with B2,
 .I command
 is executed.
 
@@ -67,28 +85,31 @@ Mouse control in
 .I qwm
 is similar to that of
 .IR acme .
-Each column has a tag bar at the top.  Unlike in acme, its text cannot be edited.  The tag bar contains, from left to right:
+Each column has a tag bar at the top.
+Unlike in acme, its text cannot be edited.
+The tag bar contains, from left to right:
 .PP
-\(bu Box for resizing and moving the column
-.br
-\(bu Column number (1-9)
-.br
-\(bu
+.IP \(bu 2
+Box for resizing and moving the column
+.IP \(bu 2
+Column number (1-9)
+.IP \(bu 2
 .I Mode
 of the column (
 .I stack
 or
-.IR single)
-.br
-\(bu Sequence number for each window
-.br
-\(bu Command names
+.IR single )
+.IP \(bu 2
+Sequence number for each window
+.IP \(bu 2
+Command names
 set by the
 .B -t
 option.
 
 .PP
-The column with focus has a brighter background for the column number and mode.  For each column, the window number that has or would have focus  (if its column had focus) also has a brighter background.
+The column with focus has a brighter background for the column number and mode.
+For each column, the window number that has or would have focus  (if its column had focus) also has a brighter background.
 
 .PP
 Mouse operations per area:
@@ -105,7 +126,8 @@ B3
 Make the column the only one visible.
 .TP
 B1 drag
-Move the column if B1 is released beyond another column's left side.  Otherwise set the left side of the column to the position of B1's release.
+Move the column if B1 is released beyond another column's left side.
+Otherwise set the left side of the column to the position of B1's release.
 
 .SS Mode
 .TP
@@ -116,18 +138,24 @@ and
 .IR single .
 .TP
 B3
-Toggle visibility of the column, i.e. make it invisible.  Only if the column is not the last one visible.
+Toggle visibility of the column, i.e. make it invisible.
+Only if the column is not the last one visible.
 
 .SS Window sequence number
-Clicking a window number with any of B1, B2 or B3 gives the focus to that window, also making sure it is visible.  Further clicks are treated the same as clicks on the window's title bars.  Dragging has no effect.
+Clicking a window number with any of B1, B2 or B3 gives the focus to that window, also making sure it is visible.
+Further clicks are treated the same as clicks on the window's title bars.
+Dragging has no effect.
 
 .SS Commands
 Clicking B2 on a command name executes the associated command.
 
 .SS Window title bar
-A typical application has buttons for resizing, hiding/minimizing and closing the application.  The resize button has no effect in qwm.  Minimizing a window shows the next window when in
+A typical application has buttons for resizing, hiding/minimizing and closing the application.
+The resize button has no effect in qwm.
+Minimizing a window shows the next window when in
 .I single
-mode, and changes the size of the window so that only the title bar is still visible.  Further operations:
+mode, and changes the size of the window so that only the title bar is still visible.
+Further operations:
 .TP
 B1
 Makes the window larger if space can be taken from other applications while keeping at least their title bar visible.
@@ -136,20 +164,29 @@ B2
 Like B1, but take as much space as possible.
 .TP
 B3
-Use all space, leaving zero height for other applications.  This is different from
+Use all space, leaving zero height for other applications.
+This is different from
 .I single
 mode, e.g. B1 and B2 still do as advertised above.
 .TP
 B1 drag
-If the button is released over another column, moves the window to that column.  If the button is released beyond another window's title bar, moves the window.  Otherwise, resize the window.  The window's title bar is left at the vertical position where the button was released.
+If the button is released over another column, moves the window to that column.
+If the button is released beyond another window's title bar, moves the window.
+Otherwise, resize the window.
+The window's title bar is left at the vertical position where the button was released.
 
 .SH KEYS
 Key commands start with the modifier
 .BR ^q ,
 control-q (hence the name
 .IR qwm ).
-All commands are one character long.  These characters can also be typed with control held, e.g. ``^q ^c'' is equivalent to ``^q c''.  This makes it easier to execute (multiple) commands.  Some commands move the focus or change the size of windows.
-Qwm always makes sure the mouse is over the window or column that holds the focus.  This makes it convenient to use both keyboard and mouse commands.  In the commands below, ``window'' typically refers to the focused window, and ``column'' to the focused column.
+All commands are one character long.
+These characters can also be typed with control held, e.g. ``^q ^c'' is equivalent to ``^q c''.
+This makes it easier to execute (multiple) commands.
+Some commands move the focus or change the size of windows.
+Qwm always makes sure the mouse is over the window or column that holds the focus.
+This makes it convenient to use both keyboard and mouse commands.
+In the commands below, ``window'' typically refers to the focused window, and ``column'' to the focused column.
 
 .TP
 .B c
@@ -213,13 +250,14 @@ Move left side of column to the left/right.
 .SH SEE ALSO
 .IR wm (1),
 .IR wm-run (1),
-.IR acme (1).
+.IR acme (1)
 .SH BUGS
 A "floating" layout mode, where windows can move freely, is not implemented.
 .PP
 Windows that need to resize (due to a change in window/column layout), flash annoyingly.
 .PP
-Qwm cannot hide the title bar of windows, or influence the buttons displayed.  The programs draw those themselves.
+Qwm cannot hide the title bar of windows, or influence the buttons displayed.
+The programs draw those themselves.
 .PP
 Inferno's default title bar does not act on B2 and B3 clicks on the title bar.
 .PP
