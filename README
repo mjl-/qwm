@@ -56,12 +56,21 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- make it possible to run in existing draw context
+- ^qw should be changed, w is annoying to type after ^q.
+- need a shortcut for switching to and maximizing other window, perhaps replacement for ^qw.
+- with button down moving to other window, don't change focus to the new window.
+- when moving windows between columns, the title bar can easily become very small, we'll have to move windows around to keep at least Winmin height for the moved window.
+- remove key bindings [omOM], i don't use them.
+- find something better for resizing columns, perhaps a "make col bigger" key and let it be smarter, gets rid of [<>,.].
+- make heuristics for which window gets screen size after one closes different.
+- perhaps make [jk] give the new window the same amount of height as a 'i'?
+- bug: unhiding a window while in single mode shows the windows as if it was in stack mode.  it should show the unhidden window in place of the current window.
 - better window placement
+- allow user to edit text in tag, with b2 for execute?  remove -t tag cmd
 - find out when we get wctlc recvs?  and handle them.  it seems nothing uses wmcontext.wctl.
 - handle "delete" fioctl.write's?  what to do with them?
 - when moving columns off-screen, don't resize their windows, only change their origin?
 - for Msingle, use window ordering to show the right window?  requires Refbackup i think
 - multiple windows/tags for a "client"?  eg for popup.  how do clients make new images?  why don't they close the windows themselves?
+- make it possible to run in existing draw context.  cannot do mousewarping...
 - floating mode?
-- allow user to edit text in tag, with b2 for execute?
