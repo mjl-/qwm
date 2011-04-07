@@ -83,12 +83,12 @@ cols,				# all columns, non-visible have width 0
 vis: array of ref Col;		# visible cols only, in order
 col: ref Col;			# col with focus (never nil).  col.win may be nil.
 tagsrect: Rect;			# space that holds the tag bars, at top
-tagptr: ref Pointer;		# non-nil when mouse was pressed on tag
+ptrdown: ref Pointer;		# ptr of last change from no buttons to any button.  nil if no button down
 otherwin: string;		# tag of "other win", either previous with focus, or last unhidden
 othercfg: ref Cfg;		# previous column configuration
-prevptr: ref Pointer;
+ptrprev: ref Pointer;
 
-# currently moving (dragging) with pointer
+# currently moving window (dragging) with pointer
 moving: ref (ref Pointer, ref Win, chan of (int, string), array of byte, Point);
 
 wctlc: chan of (ref Win, string);	# demux wmcontext wctl chans
@@ -192,8 +192,8 @@ init(ctxt: ref Context, args: list of string)
 	spawn ptr(ptrc, ppidc := chan of int);
 	<-ppidc;
 
-	prevptr = ref Pointer;
-	prevptr.xy = scr.image.r.min;
+	ptrprev = ref Pointer;
+	ptrprev.xy = scr.image.r.min;
 
 	for(;;)
 	alt {
@@ -215,7 +215,7 @@ init(ctxt: ref Context, args: list of string)
 			}
 	p := <-ptrc =>
 		mouse(p);
-		prevptr = p;
+		ptrprev = p;
 
 	(tag, rc) := <-drawctxt.wm =>
 		say("wmc: "+tag);
@@ -434,7 +434,7 @@ run(argv: list of string)
 
 run0()
 {
-	sys->pctl(Sys->FORKNS|Sys->NEWPGRP, nil);
+	sys->pctl(Sys->NEWPGRP, nil);
 	mod := load Command sprint("/dis/%s.dis", Program);
 	if(mod == nil)
 		return warn(sprint("load: %r"));
@@ -444,25 +444,32 @@ run0()
 
 mouse(p: ref Pointer)
 {
+	pp := p;
+	if(ptrdown != nil)
+		pp = ptrdown;
+
 	if(moving != nil) {
 		if(p.buttons == 0) {
 			ptrmoving(p);
 			drawtags();
 		}
-		return;
+	} else if(tagsrect.contains(pp.xy)) {
+		ptrtag(p);
+	} else {
+		if(!col.r.contains(pp.xy) || (col.win != nil && !col.win.wantr.contains(pp.xy))) {
+			(c, w) := winfindpt(pp.xy);
+			if(c != nil) {
+				focus(c, w, 0);
+				drawtags();
+			}
+		}
+		if(col.win != nil && col.win.started&Sptr)
+			col.win.nbwm.ptr <-= p;
 	}
-	if(tagptr != nil || tagsrect.contains(p.xy))
-		return ptrtag(p);
-
-	if(!col.r.contains(p.xy) || (col.win != nil && !col.win.wantr.contains(p.xy))) {
-		(c, w) := winfindpt(p.xy);
-		if(c == nil)
-			return;
-		focus(c, w, 0);
-		drawtags();
-	}
-	if(col.win != nil && col.win.started&Sptr)
-		col.win.nbwm.ptr <-= p;
+	if(!ptrprev.buttons && p.buttons)
+		ptrdown = p;
+	else if(!p.buttons)
+		ptrdown = nil;
 }
 
 ptrmoving(p: ref Pointer)
@@ -494,7 +501,7 @@ ptrmoving(p: ref Pointer)
 			w.wantr.min.y += dy;
 			resize();
 		}
-	} else {
+	} else if(ow != nil) {
 		# move past other win
 		oh := getheights(c);
 		nh: array of int;
@@ -512,10 +519,10 @@ ptrmoving(p: ref Pointer)
 
 ptrtag(p: ref Pointer)
 {
-	if(tagptr == nil) {
+	if(ptrdown == nil) {
 		# first buttons down, or just movement
 		if(p.buttons)
-			tagptr = ref *p;
+			{}
 		else if(!col.fr.contains(p.xy)) {
 			(c, w) := winfindpt(p.xy);
 			if(w == nil && len c.wins != 0)
@@ -525,30 +532,29 @@ ptrtag(p: ref Pointer)
 		}
 		return;
 	}
-	if((tagptr.buttons^p.buttons) == 0) {
+	if((ptrdown.buttons^p.buttons) == 0) {
 		# no buttons changed
 		return;
 	}
-	if(p.buttons & ~tagptr.buttons) {
+	if(p.buttons & ~ptrdown.buttons) {
 		# more buttons pressed, mark as cancelled
-		tagptr.buttons = ~0;
+		ptrdown.buttons = ~0;
 		return;
 	}
-	if(p.buttons == 0 && tagptr.buttons == ~0) {
+	if(p.buttons == 0 && ptrdown.buttons == ~0) {
 		# buttons up, but this was cancelled
-		tagptr = nil;
 		return;
 	}
 
-	say(sprint("release of %d at %d,%d", tagptr.buttons, tagptr.xy.x, tagptr.xy.y));
-	(x, nil) := winfindpt(tagptr.xy);
+	say(sprint("release of %d at %d,%d", ptrdown.buttons, ptrdown.xy.x, ptrdown.xy.y));
+	(x, nil) := winfindpt(ptrdown.xy);
 	(y, nil) := winfindpt(p.xy);
 	if(y == nil) {
 		# nothing
-	} else if(colbox(x).contains(tagptr.xy)) {
+	} else if(colbox(x).contains(ptrdown.xy)) {
 		if(x == y || x.visindex == y.visindex+1) {
 			if(colbox(x).contains(p.xy))
-				case tagptr.buttons {
+				case ptrdown.buttons {
 				B1 =>	colbigger(x);
 				B2 =>	colmax(x);
 				B3 =>	colsingle(x);
@@ -557,38 +563,37 @@ ptrtag(p: ref Pointer)
 				colsetleft(x, p.xy.x);
 				ptrbox(x);
 			}
-		} else if(tagptr.buttons == B1) {
+		} else if(ptrdown.buttons == B1) {
 			ow := getviswidths();
 			(nc, nw) := movepast(vis, ow, x.visindex, y.visindex, p.xy.x);
 			visset(nc, nw);
 		}
-	} else if(x.moder.contains(tagptr.xy)) {
-		case tagptr.buttons {
+	} else if(x.moder.contains(ptrdown.xy)) {
+		case ptrdown.buttons {
 		B1 =>
 			if(x.mode == Mstack || x.mode == Msingle)
 				modetoggle();
 		B3 =>
 			coltoggle(x);
 		}
-	} else if((j := rectindex(x.tagwins, tagptr.xy)) >= 0) {
+	} else if((j := rectindex(x.tagwins, ptrdown.xy)) >= 0) {
 		w := x.wins[j];
 		if(x == y) {
 			if(col != x || x.win != w || x.mode == Msingle)
 				focus(x, w, 0);
 			else
-				case tagptr.buttons {
+				case ptrdown.buttons {
 				B1 =>	winbigger(x, w, zeropt, 0, x.r.dy()/6);
 				B2 =>	winmax(x, w);
 				B3 =>	winsingle(x, w);
 				}
-		} else if(tagptr.buttons == B1) {
+		} else if(ptrdown.buttons == B1) {
 			winmovecol(w, x, y, p.xy.y-tagsrect.dy());
 		}
-	} else if((j = rectindex(x.tagcmds, tagptr.xy)) >= 0 && tagptr.buttons == B2) {
+	} else if((j = rectindex(x.tagcmds, ptrdown.xy)) >= 0 && ptrdown.buttons == B2) {
 		(nil, cmd) := *l2a(tagcmds)[j];
 		spawn run(list of {"sh", "-nc", cmd});
 	} 
-	tagptr = nil;
 	drawtags();
 }
 
@@ -637,7 +642,7 @@ key(x: int)
 	'L' =>
 		c := coladj(x=='L');
 		if(c != nil) {
-			winmovecol(col.win, col, c, prevptr.xy.y-tagsrect.dy());
+			winmovecol(col.win, col, c, ptrprev.xy.y-tagsrect.dy());
 			ptrensure(col, col.win);
 		}
 	'K' or
@@ -775,7 +780,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		# dragging window started, ignore reqid, startx & starty are start locations
 		narg(cmd, 4, len a);
 		pt := Point(int a[2], int a[3]);
-		moving = ref (prevptr, w, wc, buf, pt);
+		moving = ref (ptrprev, w, wc, buf, pt);
 		w.resizing = 1;
 		return;
 	"!size" =>
@@ -1166,7 +1171,7 @@ drawtag(c: ref Col)
 # place focus on col/win where ptr is
 focusptr()
 {
-	(c, w) := winfindpt(prevptr.xy);
+	(c, w) := winfindpt(ptrprev.xy);
 	if(w == nil && len c.wins != 0)
 		w = c.wins[0];
 	focus(c, w, 0);
@@ -1179,7 +1184,7 @@ ptrensure(c: ref Col, w: ref Win)
 		say(sprint("ptrensure, c %d, colbox %s, mid %s", c.index, r2s(colbox(c)), p2s(rectmid(colbox(c)))));
 		return ptrset(rectmid(colbox(c)));
 	}
-	(x, y) := prevptr.xy;
+	(x, y) := ptrprev.xy;
 	if(w.wantr.contains((x,y)))
 		return;
 	(nx, ny) := w.wantr.min.add((w.wantr.dx()/2, 10));
@@ -1390,7 +1395,7 @@ winmin(c: ref Col, w: ref Win)
 		setheights(c, h);
 		resize();
 		focus(c, nw, 0);
-		ptrset((prevptr.xy.x, nw.wantr.min.y+10));
+		ptrset((ptrprev.xy.x, nw.wantr.min.y+10));
 	}
 }
 

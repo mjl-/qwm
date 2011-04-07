@@ -56,19 +56,20 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- with buttons down moving over other window, don't change focus to that window.
 - when moving windows between columns, the title bar can easily become very small, we'll have to move windows around to keep at least Winmin height for the moved window.
-- make "col bigger" smarter.  where it takes the space from is weird.
-- make heuristics for which window gets screen size after one closes different.
-- perhaps make [jk] give the new window the same amount of height as a 'i'?
 - bug: menu's from wm/sh always show in upper-left corner, full width.
 - bug: unhiding a window while in single mode shows the windows as if it was in stack mode.  it should show the unhidden window in place of the current window.
-- better window placement
+
 - when moving columns off-screen, don't resize their windows, only change their origin?
 - for Msingle, use window ordering to show the right window?  requires Refbackup i think
 - handle "delete" fioctl.write's?  what to do with them?
 - find out when we get wctlc recvs?  and handle them.  it seems nothing uses wmcontext.wctl.
 - multiple windows/tags for a "client"?  eg for popup.  how do clients make new images?  why don't they close the windows themselves?
+
+- make "col bigger" smarter.  where it takes the space from is weird.
+- make heuristics for which window gets screen size after one closes different.
+- perhaps make [jk] give the new window the same amount of height as a 'i'?
+- better window placement
 
 - make it possible to run in existing draw context.  cannot do mousewarping...
 - floating mode?
