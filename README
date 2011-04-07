@@ -60,7 +60,6 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 - need a shortcut for switching to and maximizing other window, perhaps replacement for ^qw.
 - with button down moving to other window, don't change focus to the new window.
 - when moving windows between columns, the title bar can easily become very small, we'll have to move windows around to keep at least Winmin height for the moved window.
-- remove key bindings [omOM], i don't use them.
 - find something better for resizing columns, perhaps a "make col bigger" key and let it be smarter, gets rid of [<>,.].
 - make heuristics for which window gets screen size after one closes different.
 - perhaps make [jk] give the new window the same amount of height as a 'i'?

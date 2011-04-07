@@ -202,12 +202,6 @@ Make window bigger.
 .B i
 Make window as big as possible without hiding other windows' title bars.
 .TP
-.BR o " or " m
-Move top of window up/down
-.TP
-.BR O " or " M
-Move bottom of window up/down.
-.TP
 .BR , " or " .
 Move right side of column to the left/right
 .TP

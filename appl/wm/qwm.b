@@ -717,22 +717,6 @@ key(x: int)
 			winbigger(col, col.win, zeropt, 0, col.r.dy()/4);
 			ptrensure(col, col.win);
 		}
-	'o' or 'm' or 'O' or 'M' =>
-		if(col.mode != Mstack || col.win == nil && len col.wins <= 1)
-			return;
-
-		wi := col.win.index;
-		if(x == 'o' && wi > 0)
-			condense(col, wi-1, -1, wi, 0);
-		else if(x == 'm' && wi > 0)
-			condense(col, wi, wi+1, wi-1, Winmin);
-		else if(x == 'O' && wi < len col.wins-1)
-			condense(col, wi, wi+1, wi+1, Winmin);
-		else if(x == 'M' && wi < len col.wins-1)
-			condense(col, wi+1, len col.wins, wi, 0);
-		else
-			return;
-		ptrensure(col, col.win);
 	'X' =>
 		if(col.win != nil) {
 			# xxx not good if application was about to receive an image
@@ -1351,26 +1335,6 @@ scavenge(want, keep, s, e, delta: int, sz: array of int): int
 			break;
 	}
 	return taken;
-}
-
-# condense windows s-e (exclusive), expand n by that much.
-# s & e are window indices, e may come before s.
-condense(c: ref Col, s, e, n, min: int)
-{
-	height := c.r.dy();
-	want := height/8;
-
-	delta := 1;
-	if(s > e)
-		delta = -1;
-	h := getheights(c);
-	taken := scavenge(want, Winmin, s, e, delta, h);
-	if(taken == 0)
-		taken = scavenge(want, min, s, e, delta, h);
-	if(taken == 0)
-		return;
-	h[n] += taken;
-	setheights(c, h);
 }
 
 # move w from oc to nc
