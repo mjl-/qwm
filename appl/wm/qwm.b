@@ -489,6 +489,7 @@ ptrmoving(p: ref Pointer)
 			}
 	} else if(c != oc) {
 		winmovecol(w, c, oc, p.xy.y-tagsrect.dy());
+		ptrensure(c, w);
 	} else if(w == ow || (ow != nil && ow.index+1 == w.index)) {
 		if(w.index != 0) {
 			if(w == ow)
@@ -589,6 +590,7 @@ ptrtag(p: ref Pointer)
 				}
 		} else if(ptrdown.buttons == B1) {
 			winmovecol(w, x, y, p.xy.y-tagsrect.dy());
+			ptrensure(x, w);
 		}
 	} else if((j = rectindex(x.tagcmds, ptrdown.xy)) >= 0 && ptrdown.buttons == B2) {
 		(nil, cmd) := *l2a(tagcmds)[j];
@@ -1298,7 +1300,7 @@ scavenge(want, keep, s, e, delta: int, sz: array of int): int
 	return taken;
 }
 
-# move w from oc to nc
+# move w from oc to nc, at destination y
 winmovecol(w: ref Win, oc: ref Col, nc: ref Col, y: int)
 {
 	windel(oc, w);
@@ -1316,6 +1318,7 @@ winmovecol(w: ref Win, oc: ref Col, nc: ref Col, y: int)
 		dh := ow.wantr.max.y-y;
 		h[ow.index] -= dh;
 		h = concati(concati(h[:ow.index+1], array[] of {dh}), h[ow.index+1:]);
+		ensurewinmin(h);
 	} else {
 		nc.wins = array[] of {w};
 	}
@@ -1328,6 +1331,30 @@ winmovecol(w: ref Win, oc: ref Col, nc: ref Col, y: int)
 	nc.win = w;
 	setheights(nc, h);
 	resize();
+}
+
+# ensure each window has Winmin where possible.
+# start taking space from the bottom windows upwards.
+ensurewinmin(h: array of int)
+{
+	need := 0;
+	avail := 0;
+	for(i := 0; i < len h; i++) {
+		need += max(0, Winmin-h[i]);
+		avail += max(0, h[i]-Winmin);
+	}
+	need = min(need, avail);
+	taken := 0;
+	for(i = 0; i < len h && taken < need; i++) {
+		n := min(max(0, Winmin-h[i]), need-taken);
+		h[i] += n;
+		taken += n;
+	}
+	for(i = len h-1; i >= 0 && taken > 0; i --) {
+		n := min(max(0, h[i]-Winmin), taken);
+		h[i] -= n;
+		taken -= n;
+	}
 }
 
 winbigger(c: ref Col, w: ref Win, pt: Point, canmove: int, want: int)
