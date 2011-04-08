@@ -238,6 +238,9 @@ Make window as big as possible without hiding other windows's title bars.
 .TP
 .B o
 Make column bigger.
+.TP
+.B O
+Make column as big as possible without hiding other columns.
 
 .SH SOURCE
 /appl/wm/qwm.b

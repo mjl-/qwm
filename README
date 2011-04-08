@@ -57,8 +57,6 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 # todo
 
 - bug: menu's from wm/sh always show in upper-left corner, full width.
-- when making a column visible with ^q-shift[0-9], focus it
-- make ^qO resize a column to be as big as possible?
 
 - when moving columns off-screen, don't resize their windows, only change their origin?
 - for Msingle, use window ordering to show the right window?  requires Refbackup i think

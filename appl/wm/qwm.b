@@ -556,8 +556,8 @@ ptrtag(p: ref Pointer)
 		if(x == y || x.visindex == y.visindex+1) {
 			if(colbox(x).contains(p.xy))
 				case ptrdown.buttons {
-				B1 =>	colbigger(x);
-				B2 =>	colmax(x);
+				B1 =>	colbigger(x, 1);
+				B2 =>	colmax(x, 1);
 				B3 =>	colsingle(x);
 				}
 			else {
@@ -611,8 +611,17 @@ key(x: int)
 		ci := findstr(ops, sprint("%c", x));
 		if(ci >= 0) {
 			cfg := cfgget();
-			coltoggle(cols[ci]);
+			c := cols[ci];
+			coltoggle(c);
 			cfgset(cfg);
+			if(c.visindex >= 0) {
+				focus(c, c.win, 1);
+				if(c.win != nil) {
+					r := c.win.wantr;
+					r.max.y = r.min.y+10;
+					ptrset(rectmid(r));
+				}
+			}
 		}
 	Modchar =>
 		cfg := cfgget();
@@ -666,7 +675,9 @@ key(x: int)
 		if(w != nil)
 			focus(col, w, 1);
 	'o' =>
-		colbigger(col);
+		colbigger(col, 0);
+	'O' =>
+		colmax(col, 0);
 	'u' =>
 		if(col.mode == Mstack && col.win != nil)
 			winmax(col, col.win);
@@ -932,7 +943,7 @@ renumber(w: array of ref Win)
 		w[i].index = i;
 }
 
-# delete win from col.  set new col.win.
+# delete win from c.  set new c.win.
 # we give the height to win below, or otherwise above removed win,
 # to keep the number of changed resizes limited.
 # caller is responsible for telling focus changes to win, and resize.
@@ -1460,7 +1471,7 @@ winsingle(c: ref Col, w: ref Win)
 # make col bigger.
 # if it is rightmost, start taking space from the left.
 # otherwise, start taking from the right.
-colbigger(c: ref Col)
+colbigger(c: ref Col, warp: int)
 {
 	ox := c.tagr.min.x;
 	want := tagsrect.dx()/8;
@@ -1476,12 +1487,12 @@ colbigger(c: ref Col)
 	w[i] += taken;
 	setviswidths(w);
 	resize();
-	if(ox != c.tagr.min.x)
+	if(warp && ox != c.tagr.min.x)
 		ptrbox(c);
 }
 
 # make col as big as possible, leaving max Colmin for the others
-colmax(c: ref Col)
+colmax(c: ref Col, warp: int)
 {
 	ox := c.tagr.min.x;
 
@@ -1496,7 +1507,7 @@ colmax(c: ref Col)
 	w[j] = tagsrect.dx()-given;
 	setviswidths(w);
 	resize();
-	if(ox != c.tagr.min.x)
+	if(warp && ox != c.tagr.min.x)
 		ptrbox(c);
 }
 
@@ -1535,6 +1546,11 @@ colswitch()
 	(c, w) := winfindtag(othercfg.tag);
 	if(w != nil && find(othercfg.c, c) < 0)
 		w = nil;
+	if(w == nil && len c.wins != 0) {
+		# othercfg.tag probably quit
+		othercfg = nil;
+		return;
+	}
 	visset(othercfg.c, othercfg.w);
 	focus(othercfg.col, w, 1);
 }
