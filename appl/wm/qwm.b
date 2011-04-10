@@ -97,6 +97,7 @@ kbdc: chan of int;
 drawctxt: ref Context;
 ptrfd: ref Sys->FD;
 B1, B2, B3: con 1<<iota;
+cursorfd: ref Sys->FD;
 
 tagfont: ref Font;
 fd2: ref Sys->FD;
@@ -191,6 +192,10 @@ init(ctxt: ref Context, args: list of string)
 		fail(sprint("open /dev/pointer: %r"));
 	spawn ptr(ptrc, ppidc := chan of int);
 	<-ppidc;
+
+	cursorfd = sys->open("/dev/cursor", sys->OWRITE);
+	if(cursorfd == nil)
+		warn(sprint("open /dev/cursor: %r"));
 
 	ptrprev = ref Pointer;
 	ptrprev.xy = scr.image.r.min;
@@ -867,6 +872,35 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 	"unhide" =>
 		winunhide(cols[w.colindex], w);
 		otherwin = w.tag;
+	"ptr" =>
+		if(len a != 2)
+			error("bad ptr request");
+		ptrset(Point(int a[0], int a[1]));
+	"cursor" =>
+		if(len a == 0)
+			d := array[0] of byte;
+		else if(len a != 5)
+			error("bad cursor request");
+		else {
+			hotx := int a[0];
+			hoty := int a[1];
+			dx := int a[2];
+			dy := int a[3];
+			n := dx/8*dy;
+			if(2*n != len a[4])
+				error("bad cursor image");
+			d = array[4*4+n] of byte;
+			o := 0;
+			o = p32l(d, o, hotx);
+			o = p32l(d, o, hoty);
+			o = p32l(d, o, dx);
+			o = p32l(d, o, dy);
+			d[o:] = unhex(a[4]);
+		}
+		if(sys->write(cursorfd, d, len d) != len d)
+			error(sprint("write cursor: %r"));
+		else
+			warn("new cursor set");
 	* =>
 		error(sprint("unrecognized request %#q", cmd));
 	}
@@ -1559,7 +1593,7 @@ colswitch()
 	(c, w) := winfindtag(othercfg.tag);
 	if(w != nil && find(othercfg.c, c) < 0)
 		w = nil;
-	if(w == nil && len c.wins != 0) {
+	if(c == nil || w == nil && len c.wins != 0) {
 		# othercfg.tag probably quit
 		othercfg = nil;
 		return;
@@ -1794,6 +1828,36 @@ concati(a, b: array of int): array of int
 	n[:] = a;
 	n[len a:] = b;
 	return n;
+}
+
+p32l(d: array of byte, o: int, v: int): int
+{
+	d[o++] = byte v>>0;
+	d[o++] = byte v>>8;
+	d[o++] = byte v>>16;
+	d[o++] = byte v>>24;
+	return o;
+}
+
+unhexc(c: int): int
+{
+	case c {
+	'0' to '9' =>	return c-'0';
+	'a' to 'f' =>	return c-'a'+10;
+	'A' to 'F' =>	return c-'A'+10;
+	}
+	return 0;
+}
+
+
+unhex(s: string): array of byte
+{
+	n := len s;
+	d := array[n/2] of byte;
+	i := 0;
+	for(j := 0; j < n; j += 2)
+		d[i++] = byte unhexc(s[j])<<4 | byte unhexc(s[j+1]);
+	return d;
 }
 
 killall(l: list of int)

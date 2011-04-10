@@ -66,6 +66,6 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 - perhaps make [jk] give the new window the same amount of height as a 'i'?
 - better window placement
 
-- make it possible to run in existing draw context.  cannot do mousewarping...
+- make it possible to run in existing draw context
 - floating mode?
 - allow user to edit text in tag, with b2 for execute?  remove -t tag cmd
