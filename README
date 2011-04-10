@@ -56,13 +56,10 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- bug: menu's from wm/sh always show in upper-left corner, full width.
-
+- get a clearer idea on the wm ctls
 - when moving columns off-screen, don't resize their windows, only change their origin?
-- for Msingle, use window ordering to show the right window?  requires Refbackup i think
-- handle "delete" fioctl.write's?  what to do with them?
+- for Msingle, use window ordering to show the right window?
 - find out when we get wctlc recvs?  and handle them.  it seems nothing uses wmcontext.wctl.
-- multiple windows/tags for a "client"?  eg for popup.  how do clients make new images?  why don't they close the windows themselves?
 
 - make "col bigger" smarter.  where it takes the space from is weird.
 - make heuristics for which window gets screen size after one closes different.

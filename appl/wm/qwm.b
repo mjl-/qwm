@@ -779,15 +779,30 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		error("bad request");
 	cmd := a[0];
 	a = a[1:];
+
 	doimg := str->prefix("!", cmd);
+	rimg: ref Image;
+
 	case cmd {
 	"!reshape" =>
 		# !reshape tag reqid minx miny maxx maxy [how] 
 		if(len a != 6 && len a != 7)
 			error(sprint("reshape needs 6 or 7 params, saw %d", len a));
-		err := reshape(w);
-		if(err != nil)
-			error(err);
+		tag := a[0];
+		if(tag == ".") {
+			err := reshape(w);
+			if(err != nil)
+				error(err);
+			rimg = w.img;
+			break;
+		}
+		if(w.img == nil)
+			error("reshape of non-\".\" without image");
+		r := Rect((int a[2], int a[3]), (int a[4], int a[5]));
+		ni := drawctxt.screen.newwindow(r, draw->Refnone, draw->Grey);
+		if(ni == nil)
+			error(sprint("new window: %r"));
+		rimg = ni;
 	"!move" =>
 		# !move tag reqid startx starty
 		# dragging window started, ignore reqid, startx & starty are start locations
@@ -803,6 +818,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		err := reshape(w);
 		if(err != nil)
 			error(err);
+		rimg = w.img;
 	"start" =>
 		narg(cmd, 1, len a);
 		i := findstr(start, a[0]);
@@ -823,9 +839,6 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		spawn keysend(v);
 	"delete" =>
 		narg(cmd, 1, len a);
-		tag := a[0];
-		say(sprint("xxx delete window %#q", tag));
-		# what should we do about this?
 	"fixedorigin" =>
 		# don't change origin when moving, give new image entirely
 		narg(cmd, 0, len a);
@@ -860,8 +873,8 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 
 	wc <-= (len buf, nil);
 	if(doimg) {
-		say(sprint("sending image, r %s, wantr %s", r2s(w.img.r), r2s(w.wantr)));
-		w.nbwm.images <-= w.img;
+		say(sprint("sending image, r %s, wantr %s", r2s(rimg.r), r2s(w.wantr)));
+		w.nbwm.images <-= rimg;
 	}
 }
 
@@ -874,7 +887,7 @@ reshape(w: ref Win): string
 			say(sprint("newimg, wantr %s, img nil", r2s(w.wantr)));
 		else
 			say(sprint("newimg, wantr %s, img.r %s", r2s(w.wantr), r2s(w.img.r)));
-		nimg := drawctxt.screen.newwindow(w.wantr, draw->Refnone, draw->Grey);
+		nimg := drawctxt.screen.newwindow(w.wantr, draw->Refbackup, draw->Grey);
 		if(nimg == nil)
 			return sprint("newwindow %s: %r", r2s(w.wantr));
 		nimg.bottom();
