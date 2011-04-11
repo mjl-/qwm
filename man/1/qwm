@@ -241,6 +241,12 @@ Make column bigger.
 .TP
 .B O
 Make column as big as possible without hiding other columns.
+.TP
+.B d
+Toggle debug printing.
+.TP
+.B D
+Print information about windows to stderr.
 
 .SH SOURCE
 /appl/wm/qwm.b

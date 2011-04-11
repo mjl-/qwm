@@ -56,15 +56,16 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- get a clearer idea on the wm ctls
-- when moving columns off-screen, don't resize their windows, only change their origin?
-- for Msingle, use window ordering to show the right window?
-- find out when we get wctlc recvs?  and handle them.  it seems nothing uses wmcontext.wctl.
+- see if we can get rid of Refbackup for windows.  also get rid of using top() for Msingle, the hidden windows should be off-screen too.
+- don't hang on programs that have been killed (or are not responding?).  it seems we kill the procs behind nbwm, but don't drop the reference to win.
+- see if it's fixable that charon crashes when it gets a small image (with negative dy)
+- reduce blinking when rearranging windows
 
 - make "col bigger" smarter.  where it takes the space from is weird.
 - make heuristics for which window gets screen size after one closes different.
 - perhaps make [jk] give the new window the same amount of height as a 'i'?
 - better window placement
+- perhaps place window in adjacent column when that has lots of space
 
 - make it possible to run in existing draw context
 - floating mode?

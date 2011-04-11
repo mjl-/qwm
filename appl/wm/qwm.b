@@ -49,17 +49,16 @@ Win: adt {
 	img:	ref Image;	# nil initially
 	started:	int;
 	pids:	list of int;	# buffer pids and such
-	wantr:	Rect;		# desired rect for img (according to mode)
-	layoutr:	Rect;	# desired rect for img as if mode is Mlayout
-	haver:	Rect;		# current rect for img (as sent or being sent to app), taking screen/window origin into account
+	wantr:	Rect;		# desired rect for img.  for Msingle cols, wins have col.r
 	resizing:	int;	# whether !size msg sent or will be sent soon
 	fixedorigin:	int;
+	tagwins:	list of ref (string, ref Image);  # non-"." windows/tags
 };
 wingen := 1;	# tag is "w"+wingen
 
 Col: adt {
-	index:	int;
-	visindex:	int;
+	index:	int;			# index in cols[]
+	visindex:	int;		# index in vis[] or <0
 	r:	Rect;			# excluding tagr
 	fr:	Rect;			# including tagr
 	win:	ref Win;		# current win
@@ -83,10 +82,10 @@ cols,				# all columns, non-visible have width 0
 vis: array of ref Col;		# visible cols only, in order
 col: ref Col;			# col with focus (never nil).  col.win may be nil.
 tagsrect: Rect;			# space that holds the tag bars, at top
+ptrprev: ref Pointer;
 ptrdown: ref Pointer;		# ptr of last change from no buttons to any button.  nil if no button down
 otherwin: string;		# tag of "other win", either previous with focus, or last unhidden
 othercfg: ref Cfg;		# previous column configuration
-ptrprev: ref Pointer;
 
 # currently moving window (dragging) with pointer
 moving: ref (ref Pointer, ref Win, chan of (int, string), array of byte, Point);
@@ -203,8 +202,9 @@ init(ctxt: ref Context, args: list of string)
 	for(;;)
 	alt {
 	(w, s) := <-wctlc =>
-		say(sprint("wctl from %q: %q", w.tag, s));
-		# xxx which programs use this?
+		say(sprint("wctl from %q: %q!?", w.tag, s));
+		# not a single inferno program/library seems to use this.
+		# they all go through /chan/wmctl.
 
 	x := <-cmdc =>
 		key(x);
@@ -461,7 +461,7 @@ mouse(p: ref Pointer)
 	} else if(tagsrect.contains(pp.xy)) {
 		ptrtag(p);
 	} else {
-		if(!col.r.contains(pp.xy) || (col.win != nil && !col.win.wantr.contains(pp.xy))) {
+		if(!col.r.contains(pp.xy) || col.win != nil && !col.win.wantr.contains(pp.xy)) {
 			(c, w) := winfindpt(pp.xy);
 			if(c != nil) {
 				focus(c, w, 0);
@@ -486,28 +486,25 @@ ptrmoving(p: ref Pointer)
 	if(oc == nil) {
 		# nothing
 	} else if(abs(p.xy.x-pt.x) < 10 && abs(p.xy.y-pt.y) < 10) {
-		if(c.mode == Mstack)
-			case optr.buttons {
-			B1 =>	winbigger(c, w, pt, 1, c.r.dy()/6);
-			B2 =>	winmax(c, w);
-			B3 =>	winsingle(c, w);
-			}
+		case optr.buttons {
+		B1 =>	winbigger(c, w, pt, 1, c.r.dy()/6);
+		B2 =>	winmax(c, w);
+		B3 =>	winsingle(c, w);
+		}
 	} else if(c != oc) {
 		winmovecol(w, c, oc, p.xy.y-tagsrect.dy());
 		ptrensure(c, w);
 	} else if(w == ow || (ow != nil && ow.index+1 == w.index)) {
-		if(w.index != 0) {
+		if(w.index != 0 && c.mode == Mstack) {
 			if(w == ow)
 				ow = c.wins[w.index-1];
 			# move top of win up or down
 			dy := p.xy.y-pt.y;
-			ow.layoutr.max.y += dy;
 			ow.wantr.max.y += dy;
-			w.layoutr.min.y += dy;
 			w.wantr.min.y += dy;
 			resize();
 		}
-	} else if(ow != nil) {
+	} else if(ow != nil && c.mode == Mstack) {
 		# move past other win
 		oh := getheights(c);
 		nh: array of int;
@@ -576,11 +573,8 @@ ptrtag(p: ref Pointer)
 		}
 	} else if(x.moder.contains(ptrdown.xy)) {
 		case ptrdown.buttons {
-		B1 =>
-			if(x.mode == Mstack || x.mode == Msingle)
-				modetoggle();
-		B3 =>
-			coltoggle(x);
+		B1 =>	modetoggle();
+		B3 =>	coltoggle(x);
 		}
 	} else if((j := rectindex(x.tagwins, ptrdown.xy)) >= 0) {
 		w := x.wins[j];
@@ -627,7 +621,8 @@ key(x: int)
 					ptrset(rectmid(r));
 				}
 			}
-		}
+		} else
+			say(sprint("unknown key %c/%#x", x, x));
 	Modchar =>
 		cfg := cfgget();
 		colswitch();
@@ -684,7 +679,7 @@ key(x: int)
 	'O' =>
 		colmax(col, 0);
 	'u' =>
-		if(col.mode == Mstack && col.win != nil)
+		if(col.win != nil)
 			winmax(col, col.win);
 	'i' =>
 		if(col.mode == Mstack && col.win != nil) {
@@ -713,6 +708,26 @@ key(x: int)
 		if(x == 'm' && col.mode == Mstack) {
 			winmax(col, col.win);
 			ptrensure(col, col.win);
+		}
+	'd' =>
+		dflag = !dflag;
+	'D' =>
+		dump();
+	}
+}
+
+dump()
+{
+	for(i := 0; i < len cols; i++) {
+		c := cols[i];
+		if(col.win == nil)
+			s := "nil";
+		else
+			s = sprint("index %d", col.win.index);
+		warn(sprint("col %d, visindex=%d, r %s, fr %s, mode %s, %s", c.index, c.visindex, r2s(c.r), r2s(c.fr), modes[c.mode], s));
+		for(j := 0; j < len c.wins; j++) {
+			w := c.wins[j];
+			warn(sprint("\twin, index %d, tag %q, fid %d, resizing %d, fixedorigin %d, wantr %s", w.index, w.tag, w.fid, w.resizing, w.fixedorigin, r2s(w.wantr)));
 		}
 	}
 }
@@ -795,6 +810,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 			error(sprint("reshape needs 6 or 7 params, saw %d", len a));
 		tag := a[0];
 		if(tag == ".") {
+			w.resizing = 1;
 			err := reshape(w);
 			if(err != nil)
 				error(err);
@@ -807,6 +823,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		ni := drawctxt.screen.newwindow(r, draw->Refnone, draw->Grey);
 		if(ni == nil)
 			error(sprint("new window: %r"));
+		w.tagwins = ref (tag, ni)::tagdel(w.tagwins, tag);
 		rimg = ni;
 	"!move" =>
 		# !move tag reqid startx starty
@@ -844,6 +861,8 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		spawn keysend(v);
 	"delete" =>
 		narg(cmd, 1, len a);
+		tag := a[0];
+		w.tagwins = tagdel(w.tagwins, tag);
 	"fixedorigin" =>
 		# don't change origin when moving, give new image entirely
 		narg(cmd, 0, len a);
@@ -861,7 +880,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		if(w == col.win) {
 			nw := col.wins[(w.index+1)%len col.wins];
 			winkbd(nw, 1);
-			col.win = nw;
+			colsetwin(col, nw);
 			ptrensure(col, col.win);
 		}
 	"lower" or
@@ -899,8 +918,6 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		}
 		if(sys->write(cursorfd, d, len d) != len d)
 			error(sprint("write cursor: %r"));
-		else
-			warn("new cursor set");
 	* =>
 		error(sprint("unrecognized request %#q", cmd));
 	}
@@ -914,24 +931,25 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 
 reshape(w: ref Win): string
 {
+	new := w.resizing || w.img == nil || w.wantr.dx() != w.img.r.dx() || w.wantr.dy() != w.img.r.dy() || w.fixedorigin && !w.wantr.eq(w.img.r);
 	w.resizing = 0;
-	new := w.img == nil || (!w.wantr.eq(w.haver) || w.fixedorigin && !w.wantr.eq(w.img.r));
 	if(new) {
 		if(w.img == nil)
-			say(sprint("newimg, wantr %s, img nil", r2s(w.wantr)));
+			say(sprint("reshape: newimg, r %s, img nil", r2s(w.wantr)));
 		else
-			say(sprint("newimg, wantr %s, img.r %s", r2s(w.wantr), r2s(w.img.r)));
-		nimg := drawctxt.screen.newwindow(w.wantr, draw->Refbackup, draw->Grey);
-		if(nimg == nil)
+			say(sprint("reshape: newimg, r %s, img.r %s", r2s(w.wantr), r2s(w.img.r)));
+		i := drawctxt.screen.newwindow(w.wantr, draw->Refbackup, draw->Grey);
+		if(i == nil)
 			return sprint("newwindow %s: %r", r2s(w.wantr));
-		nimg.bottom();
-		w.img = nimg;
+		w.img = i;
+		c := cols[w.colindex];
+		if(c.mode == Msingle && w == c.win)
+			w.img.top();
 	} else {
-		say("setting new origin");
-		w.img.origin(w.wantr.min, w.wantr.min);
-		w.haver = w.wantr;
+		if(w.img.origin(w.img.r.min, w.wantr.min) != 1)
+			warn(sprint("error setting origin: %r"));
+		say(sprint("reshape: origin set to %d.%d", w.wantr.min.x, w.wantr.min.y));
 	}
-	w.haver = w.wantr;
 	return nil;
 }
 
@@ -951,7 +969,7 @@ winmk(fid: int): ref Win
 	nbwm.ctl = chan of string;
 	nbwm.images = chan of ref Image;
 
-	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, zerorect, 0, 0);
+	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, 0, 0, nil);
 
 	pidc := chan of int;
 	spawn chanbuf(nbwm.ptr, wm.ptr, pidc);
@@ -1006,19 +1024,19 @@ windel(c: ref Col, w: ref Win)
 	if(i < len c.wins) {
 		# give to top of win below the removed win
 		nw := c.wins[i];
-		nw.layoutr.min.y -= w.layoutr.dy();
-		nw.wantr.min.y -= w.wantr.dy();
-		c.win = nw;
+		if(c.mode == Mstack)
+			nw.wantr.min.y -= w.wantr.dy();
+		colsetwin(c, nw);
 	} else if(i-1 >= 0) {
 		# give to bottom of win above removed win
-		say(sprint("windel, i %d, i-1 %d, giving %d", i, i-1, w.layoutr.dy()));
+		say(sprint("windel, i %d, i-1 %d, giving %d", i, i-1, w.wantr.dy()));
 		nw := c.wins[i-1];
-		nw.layoutr.max.y += w.layoutr.dy();
-		nw.wantr.max.y += w.wantr.dy();
-		c.win = nw;
+		if(c.mode == Mstack)
+			nw.wantr.max.y += w.wantr.dy();
+		colsetwin(c, nw);
 	} else {
 		# no wins left
-		c.win = nil;
+		colsetwin(c, nil);
 	}
 }
 
@@ -1044,43 +1062,47 @@ setviswidths(a: array of int)
 		c.tagr.max.x = c.r.max.x = c.fr.max.x = x;
 		for(j := 0; j < len c.wins; j++) {
 			w := c.wins[j];
-			w.layoutr.min.x = w.wantr.min.x = c.r.min.x;
-			w.layoutr.max.x = w.wantr.max.x = c.r.max.x;
+			w.wantr.min.x = c.r.min.x;
+			w.wantr.max.x = c.r.max.x;
 		}
 	}
+	# move other columns off-screen
+	p := Point(drawctxt.screen.image.r.dx(), 0);
 	for(i = 0; i < len ocols; i++) {
 		c := ocols[i];
-		if(c == nil)
+		if(c == nil || c.r.min.x >= p.x)
 			continue;
-		c.tagr.min.x = c.r.min.x = c.fr.min.x = 0;
-		c.tagr.max.x = c.r.max.x = c.fr.max.x = 0;
+		c.tagr = c.tagr.addpt(p);
+		c.r = c.r.addpt(p);
+		c.fr = c.fr.addpt(p);
 		for(j := 0; j < len c.wins; j++) {
 			w := c.wins[j];
-			w.layoutr.min.x = w.wantr.min.x = 0;
-			w.layoutr.max.x = w.wantr.max.x = 0;
+			w.wantr = w.wantr.addpt(p);
 		}
 	}
 }
 
 getheights(c: ref Col): array of int
 {
+	if(c.mode == Msingle)
+		raise "getheights for Msingle";
+
 	a := array[len c.wins] of int;
 	for(i := 0; i < len a; i++)
-		a[i] = c.wins[i].layoutr.dy();
+		a[i] = c.wins[i].wantr.dy();
 	return a;
 }
 
 setheights(c: ref Col, a: array of int)
 {
+	if(c.mode != Mstack)
+		raise "setheights for Msingle";
 	y := c.r.min.y;
 	for(i := 0; i < len c.wins; i++) {
 		w := c.wins[i];
 		w.wantr = Rect((c.r.min.x, y), (c.r.max.x, y+a[i]));
-		if(c.mode == Mstack)
-			w.layoutr = w.wantr;
 		y += a[i];
 	}
-	resize();
 }
 
 renumbervis()
@@ -1099,17 +1121,31 @@ visset(n: array of ref Col, w: array of int)
 	resize();
 }
 
+
+colsetwin(c: ref Col, w: ref Win)
+{
+	c.win = w;
+	if(w != nil && c.mode == Msingle && w.img != nil)
+		w.img.top();
+}
+
 resize()
 {
 	for(j := 0; j < len cols; j++) {
 		c := cols[j];
 		for(i := 0; i < len c.wins; i++) {
 			w := c.wins[i];
-			if(!w.resizing && w.img != nil && !w.wantr.eq(w.haver)) {
-				winctl(w, "!size . -1 0 0");
-				w.resizing = 1;
+			if(!w.resizing && w.img != nil && !w.wantr.eq(w.img.r) && (c.mode != Msingle || w.wantr.dy() != 0)) {
+				if(!w.fixedorigin && w.wantr.dx() == w.img.r.dx() && w.wantr.dy() == w.img.r.dy()) {
+					w.img.origin(w.img.r.min, w.wantr.min);
+				} else {
+					winctl(w, "!size . -1 0 0");
+					w.resizing = 1;
+				}
 			}
 		}
+		if(len c.wins == 0 && c.r.dx() != 0 && c.r.min.x >= 0 && c.r.min.x < drawctxt.screen.image.r.min.x)
+			drawctxt.screen.image.draw(c.r, drawctxt.screen.fill, drawctxt.display.opaque, zeropt);
 	}
 }
 
@@ -1269,12 +1305,7 @@ focus(c: ref Col, w: ref Win, ensptr: int)
 			otherwin = col.win.tag;
 		}
 		if(w != nil) {
-			if(c.mode == Msingle) {
-				h := array[len c.wins] of {* => 0};
-				h[w.index] = c.r.dy();
-				setheights(c, h);
-				resize();
-			} else if(c.mode == Mstack && w.wantr.dy() < Winmin) {
+			if(c.mode == Mstack && w.wantr.dy() < Winmin) {
 				h := getheights(c);
 				want := Winmin-w.wantr.dy();
 				taken := 0;
@@ -1284,13 +1315,13 @@ focus(c: ref Col, w: ref Win, ensptr: int)
 				taken += scavenge(want-taken, 0, w.index+1, len c.wins, 1, h);
 				h[w.index] += taken;
 				setheights(c, h);
-				resize();
 			}
 			winkbd(w, 1);
 		}
 	}
 	col = c;
-	col.win = w;
+	colsetwin(c, w);
+	resize();
 	if(ensptr)
 		ptrensure(col, w);
 }
@@ -1298,17 +1329,19 @@ focus(c: ref Col, w: ref Win, ensptr: int)
 
 # change layout to add w (already in c.wins).  give w at least height 'want'.
 # c.win is not correct, don't use.
-# w is only at the end of col if it is the only window.
 layout(c: ref Col, w: ref Win, want: int)
 {
-	if(len c.wins == 1) {
-		w.wantr = w.layoutr = c.r;
+	if(len c.wins == 0)
+		return;
+	if(c.mode == Msingle) {
+		for(i := 0; i < len c.wins; i++)
+			c.wins[i].wantr = c.r;
 		return;
 	}
-
-	# pretend new win is empty, above col.win
-	w.layoutr = c.wins[w.index+1].layoutr;
-	w.layoutr.max.y = w.layoutr.min.y;
+	if(len c.wins == 1) {
+		w.wantr = c.r;
+		return;
+	}
 
 	oh := getheights(c);
 	nh := array[len c.wins] of {* => 0};
@@ -1326,18 +1359,21 @@ layout(c: ref Col, w: ref Win, want: int)
 	# hand out last height from current win upwards (skipping w),
 	# to past current win downwards.
 	for(i = w.index+1; left > 0 && i >= 0; i--) {
-		if(i == w.index)
+		if(i == w.index || i >= len c.wins)
 			continue;
 		give := min(left, oh[i]-nh[i]);
 		nh[i] += give;
 		left -= give;
 	}
 	for(i = w.index+1; left > 0 && i < len c.wins; i++) {
+		if(i >= len c.wins)
+			continue;
 		give := min(left, oh[i]-nh[i]);
 		nh[i] += give;
 		left -= give;
 	}
 	setheights(c, nh);
+	resize();
 }
 
 # scavange up to 'want' in total, keeping 'keep' per entry, starting at index 's',
@@ -1363,31 +1399,34 @@ winmovecol(w: ref Win, oc: ref Col, nc: ref Col, y: int)
 {
 	windel(oc, w);
 	col = nc;
-	if(y < nc.r.min.y)
-		y = nc.r.min.y;
 
 	h: array of int;
-	(nil, ow) := winfindpt(Point(nc.r.min.x, y));
-	if(ow == nil && len nc.wins != 0)
-		ow = nc.win;
-	if(ow != nil) {
-		h = getheights(nc);
-		nc.wins = concat(concat(nc.wins[:ow.index+1], array[] of {w}), nc.wins[ow.index+1:]);
-		dh := ow.wantr.max.y-y;
-		h[ow.index] -= dh;
-		h = concati(concati(h[:ow.index+1], array[] of {dh}), h[ow.index+1:]);
-		ensurewinmin(h);
+	if(nc.mode == Msingle) {
+		nc.wins = concat(nc.wins, array[] of {w});
+		w.wantr = nc.r;
 	} else {
-		nc.wins = array[] of {w};
+		if(y < nc.r.min.y)
+			y = nc.r.min.y;
+		(nil, ow) := winfindpt(Point(nc.r.min.x, y));
+		if(ow == nil && len nc.wins != 0)
+			ow = nc.win;
+		if(ow != nil) {
+			h = getheights(nc);
+			nc.wins = concat(concat(nc.wins[:ow.index+1], array[] of {w}), nc.wins[ow.index+1:]);
+			dh := ow.wantr.max.y-y;
+			h[ow.index] -= dh;
+			h = concati(concati(h[:ow.index+1], array[] of {dh}), h[ow.index+1:]);
+			ensurewinmin(h);
+		} else {
+			nc.wins = array[] of {w};
+			h = array[] of {nc.r.dy()};
+		}
 	}
 	w.colindex = nc.index;
 	renumber(nc.wins);
-	if(nc.mode != Mstack || len nc.wins == 1) {
-		h = array[len nc.wins] of {* => 0};
-		h[w.index] = nc.r.dy();
-	}
-	nc.win = w;
-	setheights(nc, h);
+	colsetwin(nc, w);
+	if(nc.mode != Msingle)
+		setheights(nc, h);
 	resize();
 }
 
@@ -1417,6 +1456,8 @@ ensurewinmin(h: array of int)
 
 winbigger(c: ref Col, w: ref Win, pt: Point, canmove: int, want: int)
 {
+	if(c.mode == Msingle)
+		return;
 	oy := w.wantr.min.y;
 	say(sprint("bigger win %d", w.index));
 	h := getheights(c);
@@ -1433,6 +1474,8 @@ winbigger(c: ref Col, w: ref Win, pt: Point, canmove: int, want: int)
 
 winmax(c: ref Col, w: ref Win)
 {
+	if(c.mode == Msingle)
+		return;
 	say(sprint("biggest win %d", w.index));
 	h := getheights(c);
 	left := c.r.dy();
@@ -1459,8 +1502,6 @@ winmin(c: ref Col, w: ref Win)
 	ni := (w.index-1+len c.wins)%len c.wins;
 	if(c.mode == Msingle) {
 		nw := c.wins[ni];
-		w.wantr = zerorect;
-		nw.wantr = c.r;
 		focus(c, nw, 0);
 		resize();
 	} else {
@@ -1508,9 +1549,11 @@ winunhide(c: ref Col, w: ref Win)
 winsingle(c: ref Col, w: ref Win)
 {
 	say(sprint("single win %d", w.index));
-	h := array[len c.wins] of {* => 0};
-	h[w.index] = c.r.dy();
-	setheights(c, h);
+	if(c.mode == Mstack) {
+		h := array[len c.wins] of {* => 0};
+		h[w.index] = c.r.dy();
+		setheights(c, h);
+	}
 	resize();
 	focus(c, w, 0);
 }
@@ -1689,18 +1732,16 @@ colsingle(c: ref Col)
 modesingle()
 {
 	col.mode = Msingle;
-	if(col.win == nil)
-		return;
-	sz := array[len col.wins] of {* => 0};
-	sz[col.win.index] = col.r.dy();
-	setheights(col, sz);
+	layout(col, col.win, col.r.dy());
+	resize();
 }
 
 modestack()
 {
 	col.mode = Mstack;
-	for(i := 0; i < len col.wins; i++)
-		col.wins[i].wantr = col.wins[i].layoutr;
+	dy := col.r.dy()-Winmin*(len col.wins-1);
+	dy = max(Winmin, dy);
+	layout(col, col.win, dy);
 	resize();
 	ptrensure(col, col.win);
 }
@@ -1718,12 +1759,16 @@ modetoggle()
 winfindpt(p: Point): (ref Col, ref Win)
 {
 	for(j := 0; j < len cols; j++) {
-		ww := cols[j].wins;
+		c := cols[j];
+		ww := c.wins;
+		w: ref Win;
 		for(i := 0; i < len ww; i++)
-			if(ww[i].wantr.contains(p))
-				return (cols[j], ww[i]);
-		if(cols[j].fr.contains(p))
-			return (cols[j], nil);
+			if(ww[i].wantr.contains(p) && (w == nil || c.win == ww[i]))
+				w = ww[i];
+		if(w != nil)
+			return (c, w);
+		if(c.fr.contains(p))
+			return (c, nil);
 	}
 	return (nil, nil);
 }
@@ -1814,6 +1859,18 @@ sum(a: array of int): int
 	return v;
 }
 
+tagdel(l: list of ref (string, ref Image), s: string): list of ref (string, ref Image)
+{
+	r: list of ref (string, ref Image);
+	rem := 0;
+	for(; l != nil; l = tl l)
+		if((hd l).t0 != s || rem)
+			r = hd l::r;
+		else
+			rem = 1;
+	return r;
+}
+
 concat[T](a, b: array of T): array of T
 {
 	n := array[len a+len b] of T;
@@ -1848,7 +1905,6 @@ unhexc(c: int): int
 	}
 	return 0;
 }
-
 
 unhex(s: string): array of byte
 {
