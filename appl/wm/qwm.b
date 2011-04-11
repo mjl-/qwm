@@ -50,6 +50,7 @@ Win: adt {
 	started:	int;
 	pids:	list of int;	# buffer pids and such
 	wantr:	Rect;		# desired rect for img.  for Msingle cols, wins have col.r
+	haver:	Rect;		# rect of img.  unlike img.r, which always starts at 0.0
 	resizing:	int;	# whether !size msg sent or will be sent soon
 	fixedorigin:	int;
 	tagwins:	list of ref (string, ref Image);  # non-"." windows/tags
@@ -146,10 +147,10 @@ init(ctxt: ref Context, args: list of string)
 	disp := Display.allocate(nil);
 	if(disp == nil)
 		fail(sprint("disp.allocate: %r"));
-	scr := Screen.allocate(disp.image, disp.color(draw->Grey), 0);
+	scr := Screen.allocate(disp.image, disp.color(draw->Nofill), 0);
 	if(scr == nil)
 		fail(sprint("screen.allocate: %r"));
-	scr.image.draw(scr.image.r, scr.fill, disp.opaque, zeropt);
+	scr.image.draw(scr.image.r, disp.color(draw->Grey), nil, zeropt);
 
 	wmc := chan of (string, chan of (string, ref Wmcontext));
 	drawctxt = ref Context(disp, scr, wmc);
@@ -727,7 +728,10 @@ dump()
 		warn(sprint("col %d, visindex=%d, r %s, fr %s, mode %s, %s", c.index, c.visindex, r2s(c.r), r2s(c.fr), modes[c.mode], s));
 		for(j := 0; j < len c.wins; j++) {
 			w := c.wins[j];
-			warn(sprint("\twin, index %d, tag %q, fid %d, resizing %d, fixedorigin %d, wantr %s", w.index, w.tag, w.fid, w.resizing, w.fixedorigin, r2s(w.wantr)));
+			r := "nil";
+			if(w.img != nil)
+				r = r2s(w.haver);
+			warn(sprint("\twin, index %d, tag %q, fid %d, resizing %d, fixedorigin %d, wantr %s, haver %s", w.index, w.tag, w.fid, w.resizing, w.fixedorigin, r2s(w.wantr), r));
 		}
 	}
 }
@@ -810,7 +814,6 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 			error(sprint("reshape needs 6 or 7 params, saw %d", len a));
 		tag := a[0];
 		if(tag == ".") {
-			w.resizing = 1;
 			err := reshape(w);
 			if(err != nil)
 				error(err);
@@ -823,6 +826,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		ni := drawctxt.screen.newwindow(r, draw->Refnone, draw->Grey);
 		if(ni == nil)
 			error(sprint("new window: %r"));
+		#ni.flush(draw->Flushoff);
 		w.tagwins = ref (tag, ni)::tagdel(w.tagwins, tag);
 		rimg = ni;
 	"!move" =>
@@ -863,6 +867,12 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		narg(cmd, 1, len a);
 		tag := a[0];
 		w.tagwins = tagdel(w.tagwins, tag);
+
+		# force redraw by app by sending it its current image
+		if(!w.resizing) {
+			w.resizing = 1;
+			winctl(w, "!size . -1 0 0");
+		}
 	"fixedorigin" =>
 		# don't change origin when moving, give new image entirely
 		narg(cmd, 0, len a);
@@ -931,28 +941,18 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 
 reshape(w: ref Win): string
 {
-	new := w.resizing || w.img == nil || w.wantr.dx() != w.img.r.dx() || w.wantr.dy() != w.img.r.dy() || w.fixedorigin && !w.wantr.eq(w.img.r);
+	if(w.img == nil)
+		say(sprint("reshape: newimg, r %s, img nil", r2s(w.wantr)));
+	else
+		say(sprint("reshape: newimg, r %s, img.r %s", r2s(w.wantr), r2s(w.img.r)));
+	i := drawctxt.screen.newwindow(w.wantr, draw->Refnone, draw->Nofill);
+	if(i == nil)
+		return sprint("newwindow %s: %r", r2s(w.wantr));
+	w.img = i;
+	w.haver = w.wantr;
 	w.resizing = 0;
-	if(new) {
-		if(w.img == nil)
-			say(sprint("reshape: newimg, r %s, img nil", r2s(w.wantr)));
-		else
-			say(sprint("reshape: newimg, r %s, img.r %s", r2s(w.wantr), r2s(w.img.r)));
-		i := drawctxt.screen.newwindow(w.wantr, draw->Refbackup, draw->Grey);
-		if(i == nil)
-			return sprint("newwindow %s: %r", r2s(w.wantr));
-		w.img = i;
-		c := cols[w.colindex];
-		if(c.mode == Msingle && w == c.win)
-			w.img.top();
-	} else {
-		if(w.img.origin(w.img.r.min, w.wantr.min) != 1)
-			warn(sprint("error setting origin: %r"));
-		say(sprint("reshape: origin set to %d.%d", w.wantr.min.x, w.wantr.min.y));
-	}
 	return nil;
 }
-
 
 winmk(fid: int): ref Win
 {
@@ -969,7 +969,7 @@ winmk(fid: int): ref Win
 	nbwm.ctl = chan of string;
 	nbwm.images = chan of ref Image;
 
-	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, 0, 0, nil);
+	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, 0, 0, nil);
 
 	pidc := chan of int;
 	spawn chanbuf(nbwm.ptr, wm.ptr, pidc);
@@ -1053,6 +1053,7 @@ setviswidths(a: array of int)
 	ocols := array[len cols] of ref Col;
 	ocols[:] = cols;
 
+	p := Point(drawctxt.screen.image.r.max.x, 0);
 	x := 0;
 	for(i := 0; i < len a; i++) {
 		c := vis[i];
@@ -1062,12 +1063,18 @@ setviswidths(a: array of int)
 		c.tagr.max.x = c.r.max.x = c.fr.max.x = x;
 		for(j := 0; j < len c.wins; j++) {
 			w := c.wins[j];
-			w.wantr.min.x = c.r.min.x;
-			w.wantr.max.x = c.r.max.x;
+			if(c.mode == Msingle) {
+				if(w != c.win && w.wantr.min.x < p.x)
+					w.wantr = w.wantr.addpt(p);
+				else if(w == c.win)
+					w.wantr = c.r;
+			} else {
+				w.wantr.min.x = c.r.min.x;
+				w.wantr.max.x = c.r.max.x;
+			}
 		}
 	}
 	# move other columns off-screen
-	p := Point(drawctxt.screen.image.r.dx(), 0);
 	for(i = 0; i < len ocols; i++) {
 		c := ocols[i];
 		if(c == nil || c.r.min.x >= p.x)
@@ -1095,7 +1102,7 @@ getheights(c: ref Col): array of int
 
 setheights(c: ref Col, a: array of int)
 {
-	if(c.mode != Mstack)
+	if(c.mode == Msingle)
 		raise "setheights for Msingle";
 	y := c.r.min.y;
 	for(i := 0; i < len c.wins; i++) {
@@ -1125,27 +1132,45 @@ visset(n: array of ref Col, w: array of int)
 colsetwin(c: ref Col, w: ref Win)
 {
 	c.win = w;
-	if(w != nil && c.mode == Msingle && w.img != nil)
-		w.img.top();
+	if(w == nil || c.mode != Msingle)
+		return;
+
+	p := Point(drawctxt.screen.image.r.max.x, 0);
+	for(i := 0; i < len c.wins; i++) {
+		ww := c.wins[i];
+		if(ww.img == nil)
+			continue;
+		if(ww != w && ww.wantr.min.x < p.x)
+			ww.wantr = ww.wantr.addpt(p);
+		else if(ww == w)
+			ww.wantr = c.r;
+	}
 }
 
 resize()
 {
+	scrx := drawctxt.screen.image.r.max.x;
 	for(j := 0; j < len cols; j++) {
 		c := cols[j];
 		for(i := 0; i < len c.wins; i++) {
 			w := c.wins[i];
-			if(!w.resizing && w.img != nil && !w.wantr.eq(w.img.r) && (c.mode != Msingle || w.wantr.dy() != 0)) {
-				if(!w.fixedorigin && w.wantr.dx() == w.img.r.dx() && w.wantr.dy() == w.img.r.dy()) {
-					w.img.origin(w.img.r.min, w.wantr.min);
-				} else {
-					winctl(w, "!size . -1 0 0");
-					w.resizing = 1;
-				}
+			if(w.resizing || w.img == nil || w.wantr.eq(w.haver))
+				continue;
+
+			if(!w.fixedorigin)
+			if(w.wantr.dx() == w.haver.dx())
+			if(w.wantr.dy() == w.haver.dy())
+			if(c.mode == Mstack && w.wantr.min.x == w.haver.min.x || c.mode == Msingle && w.wantr.min.x >= scrx) {
+				if(w.img.origin(w.img.r.min, w.wantr.min) != 1)
+					warn(sprint("setting origin: %r"));
+				continue;
 			}
+
+			w.resizing = 1;
+			winctl(w, "!size . -1 0 0");
 		}
-		if(len c.wins == 0 && c.r.dx() != 0 && c.r.min.x >= 0 && c.r.min.x < drawctxt.screen.image.r.min.x)
-			drawctxt.screen.image.draw(c.r, drawctxt.screen.fill, drawctxt.display.opaque, zeropt);
+		if(len c.wins == 0 && c.visindex >= 0)
+			drawctxt.screen.image.draw(c.r, drawctxt.display.color(draw->Grey), nil, zeropt);
 	}
 }
 
@@ -1210,7 +1235,6 @@ drawtag(c: ref Col)
 	selbg := drawctxt.display.color(Tagselcolor);
 	boxc := drawctxt.display.color(Tagselcolor);
 	white := drawctxt.display.white;
-	opaque := drawctxt.display.opaque;
 
 	if(c.tag == nil || c.tagr.min.x != c.tag.r.min.x || c.tagr.max.x != c.tag.r.max.x) {
 		ntag := drawctxt.screen.newwindow(c.tagr, draw->Refnone, Tagcolor);
@@ -1219,10 +1243,10 @@ drawtag(c: ref Col)
 		else
 			c.tag = ntag;
 	} else
-		c.tag.draw(c.tag.r, bg, opaque, zeropt);
+		c.tag.draw(c.tag.r, bg, nil, zeropt);
 
 	box := colbox(c);
-	c.tag.draw(box, boxc, opaque, zeropt);
+	c.tag.draw(box, boxc, nil, zeropt);
 
 	b := bg;
 	if(col == c)
