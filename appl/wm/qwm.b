@@ -265,14 +265,7 @@ init(ctxt: ref Context, args: list of string)
 	(nil, buf, fid, wc) := <-fioctl.write =>
 		if(wc == nil) {
 			w := winfindfid(fid);
-			say(sprint("win %s has gone", w.tag));
-			killall(w.pids);
-			hadfocus := col.win==w;
-			windel(cols[w.colindex], w);
-			focus(col, col.win, 1);
-			if(hadfocus && col.win != nil)
-				winkbd(col.win, 1);
-			resize();
+			windrop(w);
 		} else {
 			w := winfindfid(fid);
 			if(w == nil)
@@ -687,12 +680,12 @@ key(x: int)
 			winbigger(col, col.win, zeropt, 0, col.r.dy()/4);
 			ptrensure(col, col.win);
 		}
+	'x' =>
+		if(col.win != nil)
+			winctl(col.win, "exit");
 	'X' =>
-		if(col.win != nil) {
-			# xxx not good if application was about to receive an image
-			killall(col.win.pids);
-			spawn send(col.win.wm.ctl, "exit");
-		}
+		if(col.win != nil)
+			windrop(col.win);
 	'c' =>
 		spawn run0();
 	'n' or
@@ -1006,6 +999,21 @@ renumber(w: array of ref Win)
 {
 	for(i := 0; i < len w; i++)
 		w[i].index = i;
+}
+
+
+windrop(w: ref Win)
+{
+	if(w == nil)
+		return;
+	say(sprint("dropping win %s", w.tag));
+	killall(w.pids);
+	hadfocus := col.win==w;
+	windel(cols[w.colindex], w);
+	focus(col, col.win, 1);
+	if(hadfocus && col.win != nil)
+		winkbd(col.win, 1);
+	resize();
 }
 
 # delete win from c.  set new c.win.

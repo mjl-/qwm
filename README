@@ -56,8 +56,8 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- don't hang on programs that have been killed (or are not responding?).  it seems we kill the procs behind nbwm, but don't drop the reference to win.
 - see if it's fixable that charon crashes when it gets a small image (with negative dy)
+- fix handing out focus in Msingle columns
 
 - make "col bigger" smarter.  where it takes the space from is weird.
 - make heuristics for which window gets screen size after one closes different.

@@ -184,8 +184,11 @@ In the commands below, ``window'' typically refers to the focused window, and ``
 .B c
 Start new instance of wm/run.
 .TP
+.B x
+Ask program to exit.
+.TP
 .B X
-Tell program to exit.
+Kill processes servicing program and drop all references to it, such as its image.
 .TP
 .B n
 Place focus on window that previously had focus, or was most recently created.
