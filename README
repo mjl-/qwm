@@ -56,15 +56,14 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- see if it's fixable that charon crashes when it gets a small image (with negative dy)
-- fix handing out focus in Msingle columns
-
+- move ptr & focus to new windows.
 - make "col bigger" smarter.  where it takes the space from is weird.
-- make heuristics for which window gets screen size after one closes different.
-- perhaps make [jk] give the new window the same amount of height as a 'i'?
+- make heuristics for which window gets screen size after one closes better
 - better window placement
 - perhaps place window in adjacent column when that has lots of space
+- thorough design & code review.  lots has changed.
 
+- see if it's fixable that charon crashes when it gets a small image (with negative dy)
 - change how Screens deal with fill:  use SoverD instead of S when drawing, so we can use Nofill and get a no-op, instead of a black screen
 - make it possible to run in existing draw context
 - floating mode?

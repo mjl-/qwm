@@ -1171,6 +1171,8 @@ resize()
 			if(c.mode == Mstack && w.wantr.min.x == w.haver.min.x || c.mode == Msingle && w.wantr.min.x >= scrx) {
 				if(w.img.origin(w.img.r.min, w.wantr.min) != 1)
 					warn(sprint("setting origin: %r"));
+				else
+					w.haver = w.wantr;
 				continue;
 			}
 
