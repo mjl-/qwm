@@ -494,8 +494,6 @@ ptrmoving(p: ref Pointer)
 	} else if(abs(p.xy.x-pt.x) < 10 && abs(p.xy.y-pt.y) < 10) {
 		case optr.buttons {
 		B1 =>	winbigger(c, w, pt, 1, c.r.dy()/6);
-		B2 =>	winmax(c, w);
-		B3 =>	winsingle(c, w);
 		}
 	} else if(c != oc) {
 		winmovecol(w, c, oc, p.xy.y-tagsrect.dy());
@@ -801,6 +799,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 	doimg := str->prefix("!", cmd);
 	rimg: ref Image;
 
+	c := cols[w.colindex];
 	case cmd {
 	"!reshape" =>
 		# !reshape tag reqid minx miny maxx maxy [how] 
@@ -890,11 +889,15 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 	"lower" or
 	"task" =>
 		if(w.wantr.dy() > Winmin)
-			winmin(cols[w.colindex], w);
+			winmin(c, w);
 	"raise" or
 	"unhide" =>
-		winunhide(cols[w.colindex], w);
+		winunhide(c, w);
 		otherwin = w.tag;
+	"max" =>
+		winmax(c, w);
+	"full" =>
+		winsingle(c, w);
 	"ptr" =>
 		if(len a != 2)
 			error("bad ptr request");
@@ -1610,13 +1613,12 @@ winunhide(c: ref Col, w: ref Win)
 winsingle(c: ref Col, w: ref Win)
 {
 	say(sprint("single win %d", w.index));
-	if(c.mode == Mstack) {
-		h := array[len c.wins] of {* => 0};
-		h[w.index] = c.r.dy();
-		setheights(c, h);
+	if(c.mode == Mstack)
+		modesingle();
+	else {
+		resize();
+		focus(c, w, 0);
 	}
-	resize();
-	focus(c, w, 0);
 }
 
 # make col bigger.
