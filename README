@@ -56,7 +56,6 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- redraw after 'J' or 'K'.  perhaps for other events too.
 - make column resizing smarter.
 - thorough design & code review.  lots has changed.
 

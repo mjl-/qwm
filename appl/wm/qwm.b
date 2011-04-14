@@ -53,6 +53,7 @@ Win: adt {
 	resizing:	int;	# whether !size msg sent or will be sent soon
 	fixedorigin:	int;
 	tagwins:	list of ref (string, ref Image);  # non-"." windows/tags
+	dirty:		int;	# whether needs to be redrawn
 };
 wingen := 1;	# tag is "w"+wingen
 
@@ -670,6 +671,8 @@ key(x: int)
 			return;
 		h := getheights(col);
 		cwi := col.win.index;
+		col.win.dirty = 1;
+		w.dirty = 1;
 		(h[w.index], h[cwi]) = (h[cwi], h[w.index]);
 		(col.wins[w.index], col.wins[cwi]) = (col.wins[cwi], col.wins[w.index]);
 		renumber(col.wins);
@@ -942,6 +945,7 @@ reshape(w: ref Win): string
 	w.img = i;
 	w.haver = w.wantr;
 	w.resizing = 0;
+	w.dirty = 0;
 	return nil;
 }
 
@@ -960,7 +964,7 @@ winmk(fid: int): ref Win
 	nbwm.ctl = chan of string;
 	nbwm.images = chan of ref Image;
 
-	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, 0, 0, nil);
+	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, 0, 0, nil, 0);
 
 	pidc := chan of int;
 	spawn chanbuf(nbwm.ptr, wm.ptr, pidc);
@@ -1233,9 +1237,10 @@ resize()
 		c := cols[j];
 		for(i := 0; i < len c.wins; i++) {
 			w := c.wins[i];
-			if(w.resizing || w.img == nil || w.wantr.eq(w.haver))
+			if(w.resizing || w.img == nil || (w.wantr.eq(w.haver) && !w.dirty))
 				continue;
 
+			if(!w.dirty)
 			if(!w.fixedorigin)
 			if(w.wantr.dx() == w.haver.dx())
 			if(w.wantr.dy() == w.haver.dy())
