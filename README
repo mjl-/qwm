@@ -33,9 +33,8 @@ when building from within inferno, insert SYSHOST=Inferno and ROOT=
 in the mk invocations to override the values in the mkconfig.
 
 if you want to use button2 and button3 clicks on title bars of
-windows, apply the patch titlebar.b.diff to /appl/lib/titlebar.b, and
-compile and install that module.  this module is used by applications
-to draw the title bar bind mouse events to it.
+windows, look at the changes in the branch titlebar-maxfull, in the
+inferno-os clone "mechiel-inferno-os".
 
 it's also advisable to "bind -b /icons/tinytk /icons/tk", to make the
 title bars a bit less big.
