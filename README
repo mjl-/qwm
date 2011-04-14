@@ -56,11 +56,8 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- move ptr & focus to new windows.
-- make "col bigger" smarter.  where it takes the space from is weird.
-- make heuristics for which window gets screen size after one closes better
-- better window placement
-- perhaps place window in adjacent column when that has lots of space
+- redraw after 'J' or 'K'.  perhaps for other events too.
+- make column resizing smarter.
 - thorough design & code review.  lots has changed.
 
 - see if it's fixable that charon crashes when it gets a small image (with negative dy)

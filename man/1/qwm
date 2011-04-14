@@ -19,8 +19,8 @@ Its arrangement of stacks of windows in columns is similar to that of acme.
 .I Qwm
 always has nine columns, 1-9.
 Visibility of each column can be toggled.
-This makes columns similar to ``work spaces'' in other window managers.
-At least one column is always visible, by default only the first is visible.
+Columns can be used as ``work spaces''.
+At least one column is always visible, by default columns 1 and 2.
 Focus is always at a column, and if that column has windows, on a window.
 The focus follows the mouse.
 A column can be in
@@ -39,13 +39,12 @@ These commands are single characters preceded by a
 control-q.
 Keys exist for creating new windows, moving windows between columns, resizing windows, and resizing columns and making columns visible or hidden.
 .PP
-A new window is placed at an appropriate location.
-In
-.I single
-mode, it is the only window shown and receives focus.
-In
-.I stack
-mode, it is placed directly above the currently focused window, and does not receive focus.
+New windows are placed in the column with focus.
+If an adjacent column is at least 1.5 wider than the focused column, the window is placed there instead.
+In single mode, the new window is made visible and receives focus.
+In stacked mode, the new window takes the place of the largest window, leaving only the titlebar of the previously largest window visible.
+If the old window had focus (i.e. was in the focused column), it is ignored when looking for the largest window to replace.
+This is useful e.g. when the focused window has a list of files that can be opened by plumbing.
 .PP
 In the text below,
 .IR B1 ,
@@ -146,7 +145,9 @@ A typical application has buttons for resizing, hiding/minimizing and closing th
 The resize button has no effect in qwm.
 Minimizing a window shows the next window when in
 .I single
-mode, and changes the size of the window so that only the title bar is still visible.
+mode, and changes the size of the window so that only the title bar is still visible when in
+.I stack
+mode.
 Further operations:
 .TP
 B1
@@ -182,21 +183,14 @@ In the commands below, ``window'' typically refers to the focused window, and ``
 
 .TP
 .B c
-Start new instance of wm/run.
+Start new instance of
+.IR wm/run .
 .TP
 .B x
 Ask program to exit.
 .TP
 .B X
-Kill processes servicing program and drop all references to it, such as its image.
-.TP
-.B n
-Place focus on window that previously had focus, or was most recently created.
-.TP
-.B m
-Like
-.LR `n' ,
-but also make window as big as possible without hiding other windows's title bars.
+Kill processes servicing program and drop all references to it, most importantly its window.
 .TP
 .B q
 Restore previous column configuration (which columns were visible), and restore focus to the window at that time.
@@ -245,6 +239,9 @@ Make column bigger.
 .B O
 Make column as big as possible without hiding other columns.
 .TP
+.B r
+Move mouse to position before last warp.
+.TP
 .B d
 Toggle debug printing.
 .TP
@@ -259,8 +256,6 @@ Print information about windows to stderr.
 .IR acme (1)
 .SH BUGS
 A "floating" layout mode, where windows can move freely, is not implemented.
-.PP
-Windows that need to resize (due to a change in window/column layout), flash annoyingly.
 .PP
 Qwm cannot hide the title bar of windows, or influence the buttons displayed.
 The programs draw those themselves.

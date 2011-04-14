@@ -36,7 +36,6 @@ fontname: con "qwm./fonts/pelm/unicode.8.font";  # qwm.-prefix is for fontsrv
 Mstack, Msingle: con iota;	# Col.mode
 modes := array[] of {"stack", "single"};
 
-Wwant, Wlayout: con 1<<iota;	# for layout()
 Skbd, Sptr, Scontrol: con 1<<iota;	# Win.started
 start := array[] of {"kbd", "ptr", "control"};
 Win: adt {
@@ -85,6 +84,7 @@ col: ref Col;			# col with focus (never nil).  col.win may be nil.
 tagsrect: Rect;			# space that holds the tag bars, at top
 ptrprev: ref Pointer;
 ptrdown: ref Pointer;		# ptr of last change from no buttons to any button.  nil if no button down
+ptrwarp: Point;			# location of ptr before last warp
 otherwin: string;		# tag of "other win", either previous with focus, or last unhidden
 othercfg: ref Cfg;		# previous column configuration
 
@@ -172,9 +172,13 @@ init(ctxt: ref Context, args: list of string)
 		r.min.y = tagr.max.y;
 		cols[i] = ref Col(i, -1, r, fr, nil, nil, tagr, nil, Mstack, nil, nil, zerorect);
 	}
-	vis = array[] of {cols[0]};
+	vis = array[] of {cols[0], cols[1]};
 	cols[0].visindex = 0;
-	col = cols[0];
+	cols[1].visindex = 1;
+	dx := drawctxt.screen.image.r.dx();
+	dx0 := 3*dx/5;
+	setviswidths(array[] of {dx0, dx-dx0});
+	col = cols[1];
 	drawtags();
 
 	cmdc := chan of int;
@@ -198,7 +202,8 @@ init(ctxt: ref Context, args: list of string)
 		warn(sprint("open /dev/cursor: %r"));
 
 	ptrprev = ref Pointer;
-	ptrprev.xy = scr.image.r.min;
+	ptrprev.xy = ptrboxpt(col);
+	ptrset(ptrprev.xy);
 
 	for(;;)
 	alt {
@@ -373,14 +378,20 @@ ptr(ptrc: chan of ref Pointer, pidc: chan of int)
 	}
 }
 
-ptrbox(c: ref Col)
+ptrboxpt(c: ref Col): Point
 {
 	b := colbox(c);
-	ptrset(b.min.add((b.dx()/2, b.dy()/2)));
+	return b.min.add((b.dx()/2, b.dy()/2));
+}
+
+ptrbox(c: ref Col)
+{
+	ptrset(ptrboxpt(c));
 }
 
 ptrset(xy: Point)
 {
+	ptrwarp = ptrprev.xy;
 	p := ref Pointer;
 	p.xy = xy;
 	buf := devpointer->ptr2bytes(p);
@@ -638,6 +649,8 @@ key(x: int)
 		colsingle(col);
 		cfgset(cfg);
 		modesingle();
+	'r' =>
+		ptrset(ptrwarp);
 	'h' or
 	'l' =>
 		c := coladj(x=='l');
@@ -672,14 +685,14 @@ key(x: int)
 		colbigger(col, 0);
 	'O' =>
 		colmax(col, 0);
-	'u' =>
-		if(col.win != nil)
-			winmax(col, col.win);
 	'i' =>
 		if(col.mode == Mstack && col.win != nil) {
 			winbigger(col, col.win, zeropt, 0, col.r.dy()/4);
 			ptrensure(col, col.win);
 		}
+	'u' =>
+		if(col.win != nil)
+			winmax(col, col.win);
 	'x' =>
 		if(col.win != nil)
 			winctl(col.win, "exit");
@@ -688,21 +701,6 @@ key(x: int)
 			windrop(col.win);
 	'c' =>
 		spawn run0();
-	'n' or
-	'm' =>
-		(c, w) := winfindtag(otherwin);
-		if(w == nil)
-			return;
-		if(c.visindex < 0) {
-			cfg := cfgget();
-			coltoggle(c);
-			cfgset(cfg);
-		}
-		focus(c, w, 1);
-		if(x == 'm' && col.mode == Mstack) {
-			winmax(col, col.win);
-			ptrensure(col, col.win);
-		}
 	'd' =>
 		dflag = !dflag;
 	'D' =>
@@ -972,27 +970,85 @@ winmk(fid: int): ref Win
 	w.pids = list of {<-pidc, <-pidc, <-pidc, <-pidc};
 
 	otherwin = w.tag;
-	winadd(col, w, col.r.dy()/2);
+	c := colnewwin();
+	winadd(c, w);
 	resize();
-	if(col.mode == Msingle || len col.wins == 1)
-		focus(col, w, 0);
-	else
-		ptrensure(col, col.win);
+	focus(c, w, 1);
 	return w;
 }
 
-# add w, give it at least height h.
-# we add it before col.win if present.
-# caller is responsible for col.win
-winadd(c: ref Col, w: ref Win, h: int)
+# return col in which to place new win
+colnewwin(): ref Col
+{
+	nc := col;
+	if(col.visindex-1 >= 0 && 2*vis[col.visindex-1].r.dx() > 3*nc.r.dx() && len nc.wins != 0)
+		nc = vis[col.visindex-1];
+	if(col.visindex+1 < len vis && 2*vis[col.visindex+1].r.dx() > 3*nc.r.dx() && len nc.wins != 0)
+		nc = vis[col.visindex+1];
+	return nc;
+}
+
+# add w to c at appropriate place
+winadd(c: ref Col, w: ref Win)
 {
 	w.colindex = c.index;
+
+	if(c == col)
+		fw := col.win;
+
 	i := 0;
-	if(c.win != nil)
-		i = c.win.index;
+	h: array of int;
+
+	if(c.mode == Msingle) {
+		if(col.win != nil)
+			i = col.win.index;
+		w.wantr = c.r;
+	} else {
+		h = getheights(c);
+		bw := biggest(c, fw);
+
+		if(bw != nil)
+			i = bw.index+1;
+		dy := c.r.dy();
+		if(bw == nil) {
+			if(len c.wins == 0)
+				h = array[] of {dy};
+			else
+				h = array[] of {2*dy/3, dy-2*dy/3};
+		} else if(h[bw.index] >= 2*Winmin) {
+			nh := h[bw.index]-Winmin;
+			h[bw.index] = Winmin;
+			h = concati(concati(h[:bw.index+1], array[] of {nh}), h[bw.index+1:]);
+		} else if(fw != nil && fw.wantr.dy() >= 4*Winmin) {
+			oh := h[fw.index];
+			h[fw.index] = oh/2;
+			h = concati(concati(h[:fw.index], array[] of {oh-oh/2}), h[fw.index:]);
+			i = fw.index;
+		} else {
+			n := len c.wins+1;
+			h = array[n] of {* => dy/n};
+			h[bw.index+1] += dy-h[0]*n;
+		}
+	}
+
 	c.wins = concat(concat(c.wins[:i], array[] of {w}), c.wins[i:]);
 	renumber(c.wins);
-	layout(c, w, h);
+	if(h != nil)
+		setheights(c, h);
+}
+
+# return biggest window in c, ignore igw
+biggest(c: ref Col, igw: ref Win): ref Win
+{
+	bw: ref Win;
+	a := -1;
+	for(i := 0; i < len c.wins; i++) {
+		w := c.wins[i];
+		na := w.wantr.dx()*w.wantr.dy();
+		if(w != igw && na > a)
+			(bw, a) = (w, na);
+	}
+	return bw;
 }
 
 renumber(w: array of ref Win)
@@ -1001,35 +1057,54 @@ renumber(w: array of ref Win)
 		w[i].index = i;
 }
 
-
 windrop(w: ref Win)
 {
 	if(w == nil)
 		return;
-	say(sprint("dropping win %s", w.tag));
+	say(sprint("dropping win %s, otherwin %s", w.tag, otherwin));
 	killall(w.pids);
 	hadfocus := col.win==w;
 	windel(cols[w.colindex], w);
-	focus(col, col.win, 1);
-	if(hadfocus && col.win != nil)
-		winkbd(col.win, 1);
+
+	if(col.win == nil)
+		(oc, ow) := winfindtag(otherwin);
+	if(ow != nil)
+		focus(oc, ow, 1);
+	else if(col.win == nil && ow == nil) {
+		for(i := 1; i < len vis; i++) {
+			l := col.visindex-i;
+			r := col.visindex+i;
+			if(l >= 0 && l < len vis && vis[l].win != nil)
+				oc = vis[l];
+			else if(r >= 0 && r < len vis && vis[r].win != nil)
+				oc = vis[r];
+			else
+				continue;
+			focus(oc, oc.win, 1);
+			break;
+		}
+	} else {
+		focus(col, col.win, 1);
+		if(hadfocus && col.win != nil)
+			winkbd(col.win, 1);
+	}
 	resize();
 }
 
-# delete win from c.  set new c.win.
-# we give the height to win below, or otherwise above removed win,
-# to keep the number of changed resizes limited.
+# delete w from c.  set new c.win.
 # caller is responsible for telling focus changes to win, and resize.
 windel(c: ref Col, w: ref Win)
 {
 	i := w.index;
 	if(find(c.wins, w) != i)
-		raise "inconstency";
+		raise "inconsistency";
 	c.wins = concat(c.wins[:i], c.wins[i+1:]);
 	renumber(c.wins);
-	# this takes care of:  0,1,any wins left, for modes Mstack,Msingle
+
 	say(sprint("windel, i %d, w.index %d, len c.wins %d", i, w.index, len c.wins));
-	if(i < len c.wins) {
+	if(len c.wins == 0)
+		return colsetwin(c, nil);
+	if(i < len c.wins && (i-1 < 0 || w.wantr.dy() == Winmin)) {
 		# give to top of win below the removed win
 		nw := c.wins[i];
 		if(c.mode == Mstack)
@@ -1037,14 +1112,10 @@ windel(c: ref Col, w: ref Win)
 		colsetwin(c, nw);
 	} else if(i-1 >= 0) {
 		# give to bottom of win above removed win
-		say(sprint("windel, i %d, i-1 %d, giving %d", i, i-1, w.wantr.dy()));
 		nw := c.wins[i-1];
 		if(c.mode == Mstack)
 			nw.wantr.max.y += w.wantr.dy();
 		colsetwin(c, nw);
-	} else {
-		# no wins left
-		colsetwin(c, nil);
 	}
 }
 
@@ -1061,7 +1132,7 @@ setviswidths(a: array of int)
 	ocols := array[len cols] of ref Col;
 	ocols[:] = cols;
 
-	p := Point(drawctxt.screen.image.r.max.x, 0);
+	p := scrpt();
 	x := 0;
 	for(i := 0; i < len a; i++) {
 		c := vis[i];
@@ -1143,7 +1214,7 @@ colsetwin(c: ref Col, w: ref Win)
 	if(w == nil || c.mode != Msingle)
 		return;
 
-	p := Point(drawctxt.screen.image.r.max.x, 0);
+	p := scrpt();
 	for(i := 0; i < len c.wins; i++) {
 		ww := c.wins[i];
 		if(ww.img == nil)
@@ -1157,7 +1228,7 @@ colsetwin(c: ref Col, w: ref Win)
 
 resize()
 {
-	scrx := drawctxt.screen.image.r.max.x;
+	p := scrpt();
 	for(j := 0; j < len cols; j++) {
 		c := cols[j];
 		for(i := 0; i < len c.wins; i++) {
@@ -1168,7 +1239,7 @@ resize()
 			if(!w.fixedorigin)
 			if(w.wantr.dx() == w.haver.dx())
 			if(w.wantr.dy() == w.haver.dy())
-			if(c.mode == Mstack && w.wantr.min.x == w.haver.min.x || c.mode == Msingle && w.wantr.min.x >= scrx) {
+			if(c.mode == Mstack && w.wantr.min.x == w.haver.min.x || c.mode == Msingle && w.wantr.min.x >= p.x) {
 				if(w.img.origin(w.img.r.min, w.wantr.min) != 1)
 					warn(sprint("setting origin: %r"));
 				else
@@ -1360,55 +1431,6 @@ focus(c: ref Col, w: ref Win, ensptr: int)
 		ptrensure(col, w);
 }
 
-
-# change layout to add w (already in c.wins).  give w at least height 'want'.
-# c.win is not correct, don't use.
-layout(c: ref Col, w: ref Win, want: int)
-{
-	if(len c.wins == 0)
-		return;
-	if(c.mode == Msingle) {
-		for(i := 0; i < len c.wins; i++)
-			c.wins[i].wantr = c.r;
-		return;
-	}
-	if(len c.wins == 1) {
-		w.wantr = c.r;
-		return;
-	}
-
-	oh := getheights(c);
-	nh := array[len c.wins] of {* => 0};
-	nh[w.index] = want;
-	left := c.r.dy()-want;
-
-	# give out max Winmin to all wins except w
-	maxper := min(Winmin, left/(len nh-1));
-	for(i := 0; i < len nh; i++)
-		if(i != w.index) {
-			nh[i] = min(oh[i], maxper);
-			left -= nh[i];
-		}
-
-	# hand out last height from current win upwards (skipping w),
-	# to past current win downwards.
-	for(i = w.index+1; left > 0 && i >= 0; i--) {
-		if(i == w.index || i >= len c.wins)
-			continue;
-		give := min(left, oh[i]-nh[i]);
-		nh[i] += give;
-		left -= give;
-	}
-	for(i = w.index+1; left > 0 && i < len c.wins; i++) {
-		if(i >= len c.wins)
-			continue;
-		give := min(left, oh[i]-nh[i]);
-		nh[i] += give;
-		left -= give;
-	}
-	setheights(c, nh);
-	resize();
-}
 
 # scavange up to 'want' in total, keeping 'keep' per entry, starting at index 's',
 # ending at index 'e' (exclusive), width 'delta' as direction (1 or -1).
@@ -1763,19 +1785,40 @@ colsingle(c: ref Col)
 	focus(c, c.win, 0);
 }
 
+scrpt(): Point
+{
+	return Point(drawctxt.screen.image.r.max.x, 0);
+}
+
 modesingle()
 {
 	col.mode = Msingle;
-	layout(col, col.win, col.r.dy());
+	p := scrpt();
+	for(i := 0; i < len col.wins; i++) {
+		w := col.wins[i];
+		if(w == col.win)
+			w.wantr = col.r;
+		else if(w.wantr.min.x < p.x)
+			w.wantr = w.wantr.addpt(p);
+	}
 	resize();
 }
 
 modestack()
 {
 	col.mode = Mstack;
-	dy := col.r.dy()-Winmin*(len col.wins-1);
-	dy = max(Winmin, dy);
-	layout(col, col.win, dy);
+	
+	n := len col.wins;
+	if(n == 0)
+		h := array[0] of int;
+	else if(n == 1)
+		h = array[] of {col.r.dy()};
+	else {
+		miny := max(2*Winmin, col.r.dy()-Winmin*(n-1));
+		h = array[len col.wins] of {* => (col.r.dy()-miny)/(n-1)};
+		h[col.win.index] = col.r.dy()-h[0]*(n-1);
+	}
+	setheights(col, h);
 	resize();
 	ptrensure(col, col.win);
 }
