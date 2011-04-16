@@ -79,11 +79,28 @@ or
 .IP \(bu 2
 Sequence number for each window
 .IP \(bu 2
-Text to be executed as commands with B2.
+Editable text to be executed as commands.
 
 .PP
 The column with focus has a brighter background for the column number and mode.
 For each column, the window number that has or would have focus  (if its column had focus) also has a brighter background.
+
+.PP
+When editing text, the following keys are handled specially:
+.IP ^h
+Delete character before cursor.
+.IP ^w
+Delete word before cursor.
+.IP ^u
+Delete all text before cursor.
+.IP ^a
+Move cursor to start of text.
+.IP ^e
+Move cursor to end of text.
+.IP Left
+Move cursor one character to the left.
+.IP Right
+Move cursor one character to the right.
 
 .SH MOUSE
 Mouse control in
@@ -121,7 +138,35 @@ Further clicks are treated the same as clicks on the window's title bars.
 Dragging has no effect.
 
 .SS Commands
-Clicking B2 on a command executes it.
+B1 sets the cursor for editing and resets the selection.
+Moving with B1 held expands the selection.
+Double clicking B1 selects the word under the pointer.
+Pressing B2 and moving with B2 held sets a new selection as well.
+Releasing B2 executes the selection if it is not empty, and otherwise the word under the pointer.
+Chording is not supported.
+Several commands are handled internally:
+.TP
+.B Hide
+Hide the column.
+.TP
+.B Cols
+Show all columns with one or more windows.
+.TP
+.BI Showcol " col"
+Make column
+.I col
+visible.
+.TP
+.BI Killwin " win"
+Kill processes servicing the program identified by window number
+.I win
+and drop all references to it, most importantly its window.
+.TP
+.BI Program " program"
+Set the program to run for
+.LR "^q c"
+to
+.IR program .
 
 .SS Window title bar
 A typical application has buttons for resizing, hiding/minimizing and closing the application.

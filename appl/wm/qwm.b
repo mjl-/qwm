@@ -74,13 +74,16 @@ Col: adt {
 	win:	ref Win;		# current win
 	wins:	array of ref Win;	# all wins in col
 	tagr:	Rect;			# desired tagr
-	tag:	ref Image;		# may be nil, or not yet match tagr
 	tagwins:	array of Rect;
 	moder:	Rect;
 	s:	string;			# editable text
 	sr:	Rect;
-	cursi:	int;			# index of char after cursor, in s
-	cursx:	int;			# x of cursor, offset from sr.min.x
+	sp:	Pos;
+};
+
+Pos: adt {
+	i0:	int;			# index of char after cursor
+	i1:	int;			# start of selection.  i0 when no selection.
 };
 
 Cfg: adt {
@@ -93,12 +96,14 @@ Cfg: adt {
 cols,				# all columns, non-visible have width 0
 vis: array of ref Col;		# visible cols only, in order
 col: ref Col;			# col with focus (never nil).  col.win may be nil.
-tagsrect: Rect;			# space that holds the tag bars, at top
+tagimg: ref Image;		# double buffer for tag bars
 ptrprev: ref Pointer;
 ptrdown: ref Pointer;		# ptr of last change from no buttons to any button.  nil if no button down
 ptrwarp: Point;			# location of ptr before last warp
 otherwin: string;		# tag of "other win", either previous with focus, or last unhidden
 othercfg: ref Cfg;		# previous column configuration
+
+fg, bg, selbg, boxc: ref Image;
 
 # currently moving window (dragging) with pointer
 moving: ref (ref Pointer, ref Win, chan of (int, string), array of byte, Point);
@@ -169,16 +174,21 @@ init(ctxt: ref Context, args: list of string)
 	tagfont = Font.open(disp, fontname);
 	if(tagfont == nil)
 		tagfont = Font.open(disp, "*default*");
-	tagsrect = scr.image.r;
-	tagsrect.max.y = tagsrect.min.y+tagfont.height+2;
-	deftagwidth := tagfont.width(deftag);
+	tagsr := scr.image.r;
+	tagsr.max.y = tagsr.min.y+tagfont.height+2;
+	tagimg = disp.newimage(tagsr, disp.image.chans, 0, draw->Nofill);
+	fg = drawctxt.display.color(Tagfgcolor);
+	bg = drawctxt.display.color(Tagbgcolor);
+	selbg = drawctxt.display.color(Tagselbgcolor);
+	boxc = drawctxt.display.color(Boxcolor);
+
 	for(i := 0; i < len cols; i++) {
 		fr := r := scr.image.r;
-		tagr := tagsrect;
+		tagr := tagsr;
 		if(i != 0)
 			fr.max.x = r.max.x = tagr.max.x = r.min.x;
 		r.min.y = tagr.max.y;
-		cols[i] = ref Col(i, -1, Mstack, r, fr, nil, nil, tagr, nil, nil, zerorect, deftag, zerorect, len deftag, deftagwidth);
+		cols[i] = ref Col(i, -1, Mstack, r, fr, nil, nil, tagr, nil, zerorect, deftag, zerorect, Pos(len deftag, len deftag));
 	}
 	vis = array[] of {cols[0], cols[1]};
 	cols[0].visindex = 0;
@@ -463,7 +473,7 @@ mouse(p: ref Pointer)
 			ptrmoving(p);
 			drawtags();
 		}
-	} else if(tagsrect.contains(pp.xy)) {
+	} else if(tagimg.r.contains(pp.xy)) {
 		ptrtag(p);
 	} else {
 		if(!col.r.contains(pp.xy) || col.win != nil && !col.win.wantr.contains(pp.xy)) {
@@ -495,7 +505,7 @@ ptrmoving(p: ref Pointer)
 		B1 =>	winbigger(c, w, pt, 1, c.r.dy()/6);
 		}
 	} else if(c != oc) {
-		winmovecol(w, c, oc, p.xy.y-tagsrect.dy());
+		winmovecol(w, c, oc, p.xy.y-tagimg.r.dy());
 		ptrensure(c, w);
 	} else if(w == ow || (ow != nil && ow.index+1 == w.index)) {
 		if(w.index != 0 && c.mode == Mstack) {
@@ -511,7 +521,7 @@ ptrmoving(p: ref Pointer)
 		# move past other win
 		oh := getheights(c);
 		nh: array of int;
-		(c.wins, nh) = movepast(c.wins, oh, w.index, ow.index, p.xy.y-tagsrect.dy());
+		(c.wins, nh) = movepast(c.wins, oh, w.index, ow.index, p.xy.y-tagimg.r.dy());
 		renumber(c.wins);
 		setheights(c, nh);
 		resize();
@@ -527,19 +537,31 @@ ptrtag(p: ref Pointer)
 {
 	if(ptrdown == nil) {
 		# first buttons down, or just movement
-		if(p.buttons)
-			{}
-		else if(!col.fr.contains(p.xy)) {
+		if(!col.fr.contains(p.xy)) {
 			(c, w) := winfindpt(p.xy);
 			if(w == nil && len c.wins != 0)
 				w = c.wins[0];
 			focus(c, w, 0);
 			drawtags();
+		} else if((i := tagindex(col, p.xy.x)) >= 0) {
+			(i0, i1) := order(col.sp.i0, col.sp.i1);
+			if(p.buttons == (B1<<8|B1) && i == i0 && i == i1) {
+				(col.sp.i0, col.sp.i1) = textexpand(col.s, i);
+				drawtag(col);
+			} else if(p.buttons == B1 || p.buttons == B2 && (i < i0 || i > i1)) {
+				col.sp.i0 = col.sp.i1 = i;
+				drawtag(col);
+			}
 		}
 		return;
 	}
 	if((ptrdown.buttons^p.buttons) == 0) {
 		# no buttons changed
+		if(ptrdown.buttons & (B1|B2) && (i := tagindex(col, ptrdown.xy.x)) >= 0 && (j := tagindex(col, p.xy.x)) >= 0 && i != j) {
+			col.sp.i0 = i;
+			col.sp.i1 = j;
+			drawtag(col);
+		}
 		return;
 	}
 	if(p.buttons & ~ptrdown.buttons) {
@@ -552,7 +574,7 @@ ptrtag(p: ref Pointer)
 		return;
 	}
 
-	say(sprint("release of %d at %d,%d", ptrdown.buttons, ptrdown.xy.x, ptrdown.xy.y));
+	say(sprint("release of %#x at %d,%d", ptrdown.buttons, ptrdown.xy.x, ptrdown.xy.y));
 	(c, nil) := winfindpt(ptrdown.xy);
 	(y, nil) := winfindpt(p.xy);
 	if(y == nil) {
@@ -590,49 +612,76 @@ ptrtag(p: ref Pointer)
 				B3 =>	winsingle(c, w);
 				}
 		} else if(ptrdown.buttons == B1) {
-			winmovecol(w, c, y, p.xy.y-tagsrect.dy());
+			winmovecol(w, c, y, p.xy.y-tagimg.r.dy());
 			ptrensure(c, w);
 		}
 	} else if(p.xy.x >= c.sr.min.x) {
-		x := p.xy.x-c.sr.min.x;
-		s := c.s;
-		n := len s;
-		o := 0;
-		for(i := 0; i < n; i++) {
-			no := o+tagfont.width(s[i:i+1]);
-			if(no > x)
-				break;
-			o = no;
-		}
 		case ptrdown.buttons {
-		B1 =>
-			c.cursi = i;
-			c.cursx = o;
 		B2 =>
-			cmd(s, i);
+			(i0, i1) := order(c.sp.i0, c.sp.i1);
+			cmd(c.s, i0, i1);
 		}
 	}
 	drawtags();
 }
 
-cmd(s: string, i: int)
+tagindex(c: ref Col, x: int): int
 {
+	if(x < c.sr.min.x)
+		return -1;
+	x -= c.sr.min.x;
+	s := c.s;
+	n := len s;
+	o := 0;
+	for(i := 0; i < n; i++) {
+		no := o+tagfont.width(s[i:i+1]);
+		if(no > x)
+			break;
+		o = no;
+	}
+	return i;
+}
+
+textexpand(s: string, i: int): (int, int)
+{
+	oi := i;
 	if(i >= len s)
 		i = len s-1;
 	if(str->in(s[i], " \t\n"))
-		return;
+		return (oi, oi);
 	for(b := i; b-1 >= 0 && !str->in(s[b-1], " \t\n"); b--)
 		{}
-	for(e := i; e+1 < len s && !str->in(s[e+1], " \t\n"); e++)
+	for(e := i; e < len s && !str->in(s[e], " \t\n"); e++)
 		{}
-	s = s[b:e+1];
+	return (b, e);
+}
+
+cmd(s: string, b, e: int)
+{
+	if(b == e)
+		(b, e) = textexpand(s, b);
+	s = s[b:e];
 	case s {
+	"" =>
+		{}
 	"Hide" =>
 		coltoggle(col, 1);
 	"Cols" =>
 		colsnonempty();
 	* =>
-		spawn run(list of {"sh", "-nc", s});
+		pre: string;
+		if(str->prefix(pre="Showcol ", s)) {
+			i := int str->drop(s[len pre:], " \t\n")-1;
+			if(i >= 0 && i < len cols && cols[i].visindex < 0)
+				coltoggle(cols[i], 1);
+		} else if(str->prefix(pre="Killwin ", s)) {
+			i := int str->drop(s[len pre:], " \t\n");
+			if(i >= 0 && i < len col.wins && col.win != nil)
+				windrop(col.wins[i]);
+		} else if(str->prefix(pre="Program ", s)) {
+			program = str->drop(s[len pre:], " \t\n");
+		} else
+			spawn run(list of {"sh", "-nc", s});
 	}
 }
 
@@ -640,17 +689,41 @@ Ctl: con -16r60;
 tagkey(c: ref Col, x: int)
 {
 	s := c.s;
-	i := c.cursi;
+	i := c.sp.i0;
+
 	case x {
+	kb->Left =>
+		if(i > 0)
+			c.sp.i0--;
+	kb->Right =>
+		if(i+1 <= len s)
+			c.sp.i0++;
+	Ctl+'a' =>
+		c.sp.i0 = 0;
+	Ctl+'e' =>
+		c.sp.i0 = len s;
+	* =>
+		i1 := c.sp.i1;
+		if(i != i1) {
+			(i, i1) = order(i, i1);
+			s = c.s = c.s[:i]+c.s[i1:];
+			c.sp.i0 = i;
+		}
+	}
+
+	case x {
+	kb->Left or
+	kb->Right or 
+	Ctl+'a' or
+	Ctl+'e' =>
+		{}
 	Ctl+'h' =>
 		if(i > 0) {
-			c.cursx -= tagfont.width(s[i-1:i]);
+			c.sp.i0--;
 			c.s = s[:i-1]+s[i:];
-			c.cursi--;
 		}
 	Ctl+'u' =>
-		c.cursi = 0;
-		c.cursx = 0;
+		c.sp.i0 = 0;
 		c.s = "";
 	Ctl+'w' =>
 		Break: con "^a-zA-Z0-9";
@@ -658,32 +731,15 @@ tagkey(c: ref Col, x: int)
 			{}
 		for(; b-1 >= 0 && !str->in(s[b-1], Break); b--)
 			{}
-		c.cursx -= tagfont.width(s[b:i]);
-		c.cursi = b;
+		c.sp.i0 = b;
 		c.s = s[:b]+s[i:];
-	Ctl+'a' =>
-		c.cursx = 0;
-		c.cursi = 0;
-	Ctl+'e' =>
-		c.cursx = c.sr.dx();
-		c.cursi = len s;
-	kb->Left =>
-		if(i > 0) {
-			c.cursx -= tagfont.width(s[i-1:i]);
-			c.cursi--;
-		}
-	kb->Right =>
-		if(i+1 <= len s) {
-			c.cursx += tagfont.width(s[i:i+1]);
-			c.cursi++;
-		}
 	* =>
-		c.cursi += 1;
+		c.sp.i0++;
 		ns := "";
 		ns[len ns] = x;
-		c.cursx += tagfont.width(ns);
 		c.s = s[:i]+ns+s[i:];
 	}
+	c.sp.i1 = c.sp.i0;
 	drawtag(c);
 }
 
@@ -730,7 +786,7 @@ key(x: int)
 	'L' =>
 		c := coladj(x=='L');
 		if(c != nil && col.win != nil) {
-			winmovecol(col.win, col, c, ptrprev.xy.y-tagsrect.dy());
+			winmovecol(col.win, col, c, ptrprev.xy.y-tagimg.r.dy());
 			ptrensure(col, col.win);
 		}
 	'K' or
@@ -1399,34 +1455,25 @@ drawtags()
 
 drawtag(c: ref Col)
 {
-	bg := drawctxt.display.color(Tagbgcolor);
-	selbg := drawctxt.display.color(Tagselbgcolor);
-	boxc := drawctxt.display.color(Boxcolor);
-	fg := drawctxt.display.color(Tagfgcolor);
+	if(c.visindex < 0)
+		return;
 
-	if(c.tag == nil || c.tagr.min.x != c.tag.r.min.x || c.tagr.max.x != c.tag.r.max.x) {
-		ntag := drawctxt.screen.newwindow(c.tagr, draw->Refnone, Tagbgcolor);
-		if(ntag == nil)
-			return warn(sprint("newwindow for tag: %r"));
-		else
-			c.tag = ntag;
-	} else
-		c.tag.draw(c.tag.r, bg, nil, zeropt);
+	t := tagimg;
+	t.draw(t.r, bg, nil, zeropt);
 
 	box := colbox(c);
-	c.tag.draw(box, boxc, nil, zeropt);
+	t.draw(box, boxc, nil, zeropt);
 
 	b := bg;
 	if(col == c)
 		b = selbg;
-	p := Point(box.max.x+3, c.tag.r.min.y+1);
-	p = c.tag.text(p, fg, zeropt, tagfont, " ");
-	p = c.tag.textbg(p, fg, zeropt, tagfont, sprint("%d ", c.index+1), b, zeropt);
+	p := Point(box.max.x+3, t.r.min.y+1);
+	p = t.text(p, fg, zeropt, tagfont, " ");
+	p = t.textbg(p, fg, zeropt, tagfont, sprint("%d ", c.index+1), b, zeropt);
 	c.moder = Rect((p.x, c.tagr.min.y), (0, c.tagr.max.y));
 	m := modes[c.mode];
-	p = c.tag.textbg(p, fg, zeropt, tagfont, m, b, zeropt);
-	s := "       ";
-	p = c.tag.text(p, fg, zeropt, tagfont, s[len m:]);
+	p = t.textbg(p, fg, zeropt, tagfont, m, b, zeropt);
+	p.x += (7-len m)*tagfont.width(" ");
 	c.moder.max.x = p.x;
 	c.tagwins = array[len c.wins] of Rect;
 	slackwidth := tagfont.width(" ")/2;
@@ -1434,28 +1481,45 @@ drawtag(c: ref Col)
 		b = bg;
 		if(c.win == c.wins[i])
 			b = selbg;
-		p = c.tag.textbg(p, fg, zeropt, tagfont, " ", bg, zeropt);
+		p = t.textbg(p, fg, zeropt, tagfont, " ", bg, zeropt);
 		c.tagwins[i] = c.tagr;
 		c.tagwins[i].min.x = p.x-slackwidth;
-		p = c.tag.textbg(p, fg, zeropt, tagfont, sprint("%d", i), b, zeropt);
+		p = t.textbg(p, fg, zeropt, tagfont, sprint("%d", i), b, zeropt);
 		c.tagwins[i].max.x = p.x+slackwidth;
 	}
-	p = c.tag.textbg(p, fg, zeropt, tagfont, " ", bg, zeropt);
+	p = t.textbg(p, fg, zeropt, tagfont, " ", bg, zeropt);
 
 	c.sr.min = Point(p.x, c.tagr.min.y);
-	p = c.tag.textbg(p, fg, zeropt, tagfont, c.s, bg, zeropt);
+	(i0, i1) := (c.sp.i0, c.sp.i1);
+	if(i0 == i1) {
+		p = t.textbg(p, fg, zeropt, tagfont, c.s, bg, zeropt);
+
+		# draw cursor
+		miny := c.tagr.min.y;
+		maxy := c.tagr.max.y;
+		cx := c.sr.min.x+tagfont.width(c.s[:i0]);
+		cr := Rect((cx, miny), (cx+1, maxy));
+		cbr0 := Rect((cx-1, miny), (cx+2, miny+2));
+		cbr1 := cbr0.addpt(Point(0, c.tagr.dy()-2));
+		t.draw(cr, fg, nil, zeropt);
+		t.draw(cbr0, fg, nil, zeropt);
+		t.draw(cbr1, fg, nil, zeropt);
+	} else {
+		(i0, i1) = order(i0, i1);
+		l := list of {
+		(c.s[:i0], bg),
+		(c.s[i0:i1], selbg),
+		(c.s[i1:], bg)
+		};
+		for(; l != nil; l = tl l) {
+			(s, sbg) := hd l;
+			if(s != nil)
+				p = t.textbg(p, fg, zeropt, tagfont, s, sbg, zeropt);
+		}
+	}
 	c.sr.max = Point(p.x, c.tagr.max.y);
 
-	# draw cursor
-	miny := c.tagr.min.y;
-	maxy := c.tagr.max.y;
-	cx := c.sr.min.x+c.cursx;
-	cr := Rect((cx, miny), (cx+1, maxy));
-	cbr0 := Rect((cx-1, miny), (cx+2, miny+2));
-	cbr1 := cbr0.addpt(Point(0, c.tagr.dy()-2));
-	c.tag.draw(cr, fg, nil, zeropt);
-	c.tag.draw(cbr0, fg, nil, zeropt);
-	c.tag.draw(cbr1, fg, nil, zeropt);
+	drawctxt.display.image.draw(c.tagr, t, nil, c.tagr.min);
 }
 
 # place focus on col/win where ptr is
@@ -1708,7 +1772,7 @@ winsingle(c: ref Col, w: ref Win)
 colbigger(c: ref Col, warp: int)
 {
 	ox := c.tagr.min.x;
-	want := tagsrect.dx()/8;
+	want := tagimg.r.dx()/8;
 	keep := Colmin;
 	w := getviswidths();
 	i := c.visindex;
@@ -1738,7 +1802,7 @@ colmax(c: ref Col, warp: int)
 			w[i] = min(w[i], Colmin);
 			given += w[i];
 		}
-	w[j] = tagsrect.dx()-given;
+	w[j] = tagimg.r.dx()-given;
 	setviswidths(w);
 	resize();
 	if(warp && ox != c.tagr.min.x)
@@ -1814,7 +1878,7 @@ coltoggle0(c: ref Col): int
 		# add c
 		ci := col.visindex;
 		w := getviswidths();
-		avail := tagsrect.dx()/(len vis+1);
+		avail := tagimg.r.dx()/(len vis+1);
 		keep := min(avail, Colmin);
 		take := scavenge(avail, keep, ci+1, len vis, 1, w);
 		take += scavenge(avail-take, keep, 0, ci+1, 1, w);
@@ -1860,13 +1924,13 @@ colnonempty()
 	ow := getviswidths();
 	nw := array[len n+len a] of int;
 	nv := l2a(n);
-	left := tagsrect.dx();
+	left := tagimg.r.dx();
 	for(i = 0; i < len nv; i++) {
 		nw[i] = ow[nv[i].visindex];
 		left -= nw[i];
 	}
 	need := len a*Colmin;
-	keep := min(tagsrect.dx()/(len n+len a), Colmin);
+	keep := min(tagimg.r.dx()/(len n+len a), Colmin);
 	left += scavenge(need-left, keep, 0, len nv, 1, nw[:len nv]);
 	nv = concat(nv, l2a(a));
 
@@ -1886,7 +1950,7 @@ colnonempty()
 
 colsingle(c: ref Col)
 {
-	visset(array[] of {c}, array[] of {tagsrect.dx()});
+	visset(array[] of {c}, array[] of {tagimg.r.dx()});
 	focus(c, c.win, 0);
 }
 
@@ -2051,6 +2115,13 @@ tagdel(l: list of ref (string, ref Image), s: string): list of ref (string, ref 
 		else
 			rem = 1;
 	return r;
+}
+
+order(a, b: int): (int, int)
+{
+	if(a < b)
+		return (a, b);
+	return (b, a);
 }
 
 concat[T](a, b: array of T): array of T
