@@ -164,7 +164,7 @@ and drop all references to it, most importantly its window.
 .TP
 .BI Program " program"
 Set the program to run for
-.LR "^q c"
+.LR ^qc
 to
 .IR program .
 
@@ -202,7 +202,7 @@ Key commands start with the modifier
 control-q (hence the name
 .IR qwm ).
 All commands are one character long.
-These characters can also be typed with control held, e.g. ``^q ^c'' is equivalent to ``^q c''.
+These characters can also be typed with control held, e.g. ``^q^c'' is equivalent to ``^qc''.
 This makes it easier to execute (multiple) commands.
 Some commands move the focus or change the size of windows.
 Qwm always makes sure the mouse is over the window or column that holds the focus.
@@ -275,6 +275,103 @@ Toggle debug printing.
 .TP
 .B D
 Print information about windows to stderr.
+
+.SH WMCTL
+.PP
+Reading from
+.B /chan/wmctl
+creates a new window, the
+.I tag
+of the window is returned.
+The following formats may be written to such file descriptors:
+.TP
+.I "!reshape tag reqid minx miny maxx maxy [how]"
+.TP
+.I "!move tag reqid startx starty"
+.TP
+.I "!size tag reqid startx starty"
+.TP
+.I "start [ptr|kbd|control]"
+.TP
+.I "key decimal-key"
+.TP
+.I "delete tag"
+.TP
+.I fixedorigin
+.TP
+.I "kbdfocus [want]"
+.TP
+.IR lower " and " task
+.TP
+.IR raise " and " unhide
+.TP
+.I "ptr x y"
+.TP
+.I "cursor hotx hoty dx dy hex-image"
+.TP
+.I max
+.TP
+.I full
+
+.PP
+The following writes to
+.B /chan/wmctl
+are allowed only for file descriptors with no tag associated:
+.TP
+.BI program " program"
+Set the program to run for
+.LR "^qc" .
+.TP
+.B cols
+Show only columns with one or more windows.
+.TP
+.BI showcol " colnr"
+Make column
+.I colnr
+visible.
+.TP
+.I what " color"
+With
+.I what
+one of:
+.LR tagfg ,
+.LR tagbg ,
+.LR tagselbg ,
+.LR tagbox ,
+.LR colbg .
+.I Color
+must be a color in hexadecimal
+.I rrggbbaa
+format.
+These commands set the colors of the tags, column box and column background.
+
+.PP
+.I Qwm's
+screen size can be read from
+.BR /chan/wmrect .
+
+.SH EXAMPLES
+With the following in the
+.IR profile ,
+the program to run for
+.LR "^qc"
+is set to
+.I wm/sh
+and colors made similar to acme's (though without any borders!):
+.PP
+.EX
+        echo -n 'program wm/sh' >/chan/wmctl &
+        echo -n 'tagfg 000000ff' >/chan/wmctl &
+        echo -n 'tagbg d4ffffff' >/chan/wmctl &
+        echo -n 'tagselbg aaffffff' >/chan/wmctl &
+        echo -n 'boxc 8888ccff' >/chan/wmctl &
+        echo -n 'colbg ffffd4ff' >/chan/wmctl &
+.EE
+
+.SH FILES
+.B /chan/wmrect
+.br
+.B /chan/wmctl
 
 .SH SOURCE
 /appl/wm/qwm.b

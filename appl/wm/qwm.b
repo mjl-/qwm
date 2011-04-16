@@ -103,7 +103,7 @@ ptrwarp: Point;			# location of ptr before last warp
 otherwin: string;		# tag of "other win", either previous with focus, or last unhidden
 othercfg: ref Cfg;		# previous column configuration
 
-fg, bg, selbg, boxc: ref Image;
+fg, bg, selbg, boxc, colbg: ref Image;
 
 # currently moving window (dragging) with pointer
 moving: ref (ref Pointer, ref Win, chan of (int, string), array of byte, Point);
@@ -162,7 +162,8 @@ init(ctxt: ref Context, args: list of string)
 	scr := Screen.allocate(disp.image, disp.color(draw->Nofill), 0);
 	if(scr == nil)
 		fail(sprint("screen.allocate: %r"));
-	scr.image.draw(scr.image.r, disp.color(Colbgcolor), nil, zeropt);
+	colbg = disp.color(Colbgcolor);
+	scr.image.draw(scr.image.r, colbg, nil, zeropt);
 
 	wmc := chan of (string, chan of (string, ref Wmcontext));
 	drawctxt = ref Context(disp, scr, wmc);
@@ -293,9 +294,33 @@ init(ctxt: ref Context, args: list of string)
 			windrop(w);
 		} else {
 			w := winfindfid(fid);
-			if(w == nil)
-				wc <-= (-1, sprint("no window for fid %d", fid));
-			else
+			if(w == nil) {
+				s := string buf;
+				err: string;
+				(cmd, rem) := str->splitstrl(s, " ");
+				rem = str->drop(rem, " ");
+				case cmd {
+				"program" =>	program = rem;
+				"tagfg" =>	(fg, err) = parsecolor(rem, fg);
+				"tagbg" =>	(bg, err) = parsecolor(rem, bg);
+				"tagselbg" =>	(selbg, err) = parsecolor(rem, selbg);
+				"tagbox" =>	(boxc, err) = parsecolor(rem, boxc);
+				"colbg" =>
+					(colbg, err) = parsecolor(rem, colbg);
+					if(err == nil)
+						for(j := 0; j < len vis; j++)
+							if(len vis[j].wins == 0)
+								drawctxt.screen.image.draw(vis[j].r, colbg, nil, zeropt);
+				"cols" =>	colsnonempty();
+				"showcol" =>
+						j := int rem-1;
+						if(j >= 0 && j < len cols && cols[j].visindex < 0)
+							coltoggle(cols[j], 1);
+				* =>		err = "bad request";
+				}
+				drawtags();
+				wc <-= (len buf, err);
+			} else
 				{
 					ctlwrite(w, buf, wc);
 				} exception ex {
@@ -307,6 +332,17 @@ init(ctxt: ref Context, args: list of string)
 		}
 		drawtags();
 	}
+}
+
+parsecolor(s: string, oi: ref Image): (ref Image, string)
+{
+	(v, rv) := str->toint(s, 16);
+	if(rv != nil)
+		return (oi, "bad color");
+	i := drawctxt.display.color(v);
+	if(i == nil)
+		return (oi, sprint("new color: %r"));
+	return (i, nil);
 }
 
 wctlfwd(w: ref Win, pidc: chan of int)
@@ -1394,7 +1430,7 @@ resize()
 			winctl(w, "!size . -1 0 0");
 		}
 		if(len c.wins == 0 && c.visindex >= 0)
-			drawctxt.screen.image.draw(c.r, drawctxt.display.color(Colbgcolor), nil, zeropt);
+			drawctxt.screen.image.draw(c.r, colbg, nil, zeropt);
 	}
 }
 
