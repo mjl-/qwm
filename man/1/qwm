@@ -6,9 +6,6 @@ qwm \- window manager
 [
 .B -d
 ] [
-.BI -t " tag cmd"
-]
-[
 .I profile
 ]
 .SH DESCRIPTION
@@ -46,12 +43,6 @@ In stacked mode, the new window takes the place of the largest window, leaving o
 If the old window had focus (i.e. was in the focused column), it is ignored when looking for the largest window to replace.
 This is useful e.g. when the focused window has a list of files that can be opened by plumbing.
 .PP
-In the text below,
-.IR B1 ,
-.I B2
-and
-.I B3
-stand for buttons 1, 2 and 3.
 .SS Options
 If
 .I profile
@@ -62,22 +53,17 @@ It is typically used to set up the namespace and start commands.
 .TP
 .B -d
 Enable debug prints.
-.TP
-.BI -t " name command"
-Add
-.I name
-to the tag bar of each column.
-When it is clicked with B2,
-.I command
-is executed.
 
-.SH MOUSE
-Mouse control in
-.I qwm
-is similar to that of
-.IR acme .
+.PP
+In the text below,
+.IR B1 ,
+.I B2
+and
+.I B3
+stand for buttons 1, 2 and 3.
+
+.SH TAGS
 Each column has a tag bar at the top.
-Unlike in acme, its text cannot be edited.
 The tag bar contains, from left to right:
 .PP
 .IP \(bu 2
@@ -93,17 +79,18 @@ or
 .IP \(bu 2
 Sequence number for each window
 .IP \(bu 2
-Command names
-set by the
-.B -t
-option.
+Text to be executed as commands with B2.
 
 .PP
 The column with focus has a brighter background for the column number and mode.
 For each column, the window number that has or would have focus  (if its column had focus) also has a brighter background.
 
-.PP
-Mouse operations per area:
+.SH MOUSE
+Mouse control in
+.I qwm
+is similar to that of
+.IR acme .
+Mouse operations per area in the column:
 
 .SS Box
 .TP
@@ -127,10 +114,6 @@ Switch the mode of the column, between
 .I stack
 and
 .IR single .
-.TP
-B3
-Toggle visibility of the column, i.e. make it invisible.
-Only if the column is not the last one visible.
 
 .SS Window sequence number
 Clicking a window number with any of B1, B2 or B3 gives the focus to that window, also making sure it is visible.
@@ -138,7 +121,7 @@ Further clicks are treated the same as clicks on the window's title bars.
 Dragging has no effect.
 
 .SS Commands
-Clicking B2 on a command name executes the associated command.
+Clicking B2 on a command executes it.
 
 .SS Window title bar
 A typical application has buttons for resizing, hiding/minimizing and closing the application.

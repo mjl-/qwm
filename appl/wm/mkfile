@@ -8,6 +8,7 @@ SYSMODULES=\
 	bufio.m\
 	daytime.m\
 	draw.m\
+	keyboard.m\
 	keyring.m\
 	string.m\
 	sys.m\

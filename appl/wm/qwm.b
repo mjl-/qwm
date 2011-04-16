@@ -14,6 +14,8 @@ include "string.m";
 	str: String;
 include "devpointer.m";
 	devpointer: Devpointer;
+include "keyboard.m";
+	kb: Keyboard;
 include "sh.m";
 	sh: Sh;
 
@@ -21,20 +23,26 @@ Qwm: module {
 	init:	fn(nil: ref Context, args: list of string);
 };
 
+program := "wm/run";
+deftag: con "Hide wm/run";
+
+Tagfgcolor: con Draw->White;
+Tagbgcolor: con Draw->Greyblue;
+Tagselbgcolor: con Draw->Palegreyblue;
+Boxcolor: con Draw->Palegreyblue;
+Colbgcolor: con Draw->Grey;
+
 Modchar: con 'q';
 Mod: con -16r60;	# against lower case only
-Program: con "wm/run";
+
 Winmin: con 16;	# desired min height of window
 Colmin: con 50;	# desired min width of column
-Tagcolor: con Draw->Greyblue;
-Tagselcolor: con Draw->Palegreyblue;
 
 dflag := 0;
-tagcmds: list of ref (string, string);
 fontname: con "qwm./fonts/pelm/unicode.8.font";  # qwm.-prefix is for fontsrv
 
 Mstack, Msingle: con iota;	# Col.mode
-modes := array[] of {"stack", "single"};
+modes := array[] of {"Stack", "Single"};
 
 Skbd, Sptr, Scontrol: con 1<<iota;	# Win.started
 start := array[] of {"kbd", "ptr", "control"};
@@ -60,16 +68,19 @@ wingen := 1;	# tag is "w"+wingen
 Col: adt {
 	index:	int;			# index in cols[]
 	visindex:	int;		# index in vis[] or <0
+	mode:	int;
 	r:	Rect;			# excluding tagr
 	fr:	Rect;			# including tagr
 	win:	ref Win;		# current win
 	wins:	array of ref Win;	# all wins in col
 	tagr:	Rect;			# desired tagr
 	tag:	ref Image;		# may be nil, or not yet match tagr
-	mode:	int;
 	tagwins:	array of Rect;
-	tagcmds:	array of Rect;
 	moder:	Rect;
+	s:	string;			# editable text
+	sr:	Rect;
+	cursi:	int;			# index of char after cursor, in s
+	cursx:	int;			# x of cursor, offset from sr.min.x
 };
 
 Cfg: adt {
@@ -117,20 +128,15 @@ init(ctxt: ref Context, args: list of string)
 	sh = load Sh Sh->PATH;
 
 	arg->init(args);
-	arg->setusage(arg->progname()+" [-d] [-t tag cmd] [profile]");
+	arg->setusage(arg->progname()+" [-d] [profile]");
 	while((c := arg->opt()) != 0)
 		case c {
 		'd' =>	dflag++;
-		't' =>
-			tag := arg->arg();
-			cmd := arg->arg();
-			tagcmds = ref (tag, cmd)::tagcmds;
 		* =>	arg->usage();
 		}
 	args = arg->argv();
 	if(len args > 1)
 		arg->usage();
-	tagcmds = rev(tagcmds);
 	if(args != nil)
 		profile := hd args;
 
@@ -151,7 +157,7 @@ init(ctxt: ref Context, args: list of string)
 	scr := Screen.allocate(disp.image, disp.color(draw->Nofill), 0);
 	if(scr == nil)
 		fail(sprint("screen.allocate: %r"));
-	scr.image.draw(scr.image.r, disp.color(draw->Grey), nil, zeropt);
+	scr.image.draw(scr.image.r, disp.color(Colbgcolor), nil, zeropt);
 
 	wmc := chan of (string, chan of (string, ref Wmcontext));
 	drawctxt = ref Context(disp, scr, wmc);
@@ -165,13 +171,14 @@ init(ctxt: ref Context, args: list of string)
 		tagfont = Font.open(disp, "*default*");
 	tagsrect = scr.image.r;
 	tagsrect.max.y = tagsrect.min.y+tagfont.height+2;
+	deftagwidth := tagfont.width(deftag);
 	for(i := 0; i < len cols; i++) {
 		fr := r := scr.image.r;
 		tagr := tagsrect;
 		if(i != 0)
 			fr.max.x = r.max.x = tagr.max.x = r.min.x;
 		r.min.y = tagr.max.y;
-		cols[i] = ref Col(i, -1, r, fr, nil, nil, tagr, nil, Mstack, nil, nil, zerorect);
+		cols[i] = ref Col(i, -1, Mstack, r, fr, nil, nil, tagr, nil, nil, zerorect, deftag, zerorect, len deftag, deftagwidth);
 	}
 	vis = array[] of {cols[0], cols[1]};
 	cols[0].visindex = 0;
@@ -218,7 +225,9 @@ init(ctxt: ref Context, args: list of string)
 		drawtags();
 
 	x := <-kbdc =>
-		if(col.win != nil && col.win.started&Skbd)
+		if(col.win == nil || col.tagr.contains(ptrprev.xy)) {
+			tagkey(col, x);
+		} else if(col.win != nil && col.win.started&Skbd)
 			alt {
 			col.win.nbwm.kbd <-= x =>
 				{}
@@ -443,16 +452,6 @@ run(argv: list of string)
 	sh->run(drawctxt, argv);
 }
 
-run0()
-{
-	sys->pctl(Sys->NEWPGRP, nil);
-	mod := load Command sprint("/dis/%s.dis", Program);
-	if(mod == nil)
-		return warn(sprint("load: %r"));
-	spawn mod->init(drawctxt, list of {Program});
-}
-
-
 mouse(p: ref Pointer)
 {
 	pp := p;
@@ -554,52 +553,138 @@ ptrtag(p: ref Pointer)
 	}
 
 	say(sprint("release of %d at %d,%d", ptrdown.buttons, ptrdown.xy.x, ptrdown.xy.y));
-	(x, nil) := winfindpt(ptrdown.xy);
+	(c, nil) := winfindpt(ptrdown.xy);
 	(y, nil) := winfindpt(p.xy);
 	if(y == nil) {
 		# nothing
-	} else if(colbox(x).contains(ptrdown.xy)) {
-		if(x == y || x.visindex == y.visindex+1) {
-			if(colbox(x).contains(p.xy))
+	} else if(colbox(c).contains(ptrdown.xy)) {
+		if(c == y || c.visindex == y.visindex+1) {
+			if(colbox(c).contains(p.xy))
 				case ptrdown.buttons {
-				B1 =>	colbigger(x, 1);
-				B2 =>	colmax(x, 1);
-				B3 =>	colsingle(x);
+				B1 =>	colbigger(c, 1);
+				B2 =>	colmax(c, 1);
+				B3 =>	colsingle(c);
 				}
 			else {
-				colsetleft(x, p.xy.x);
-				ptrbox(x);
+				colsetleft(c, p.xy.x);
+				ptrbox(c);
 			}
 		} else if(ptrdown.buttons == B1) {
 			ow := getviswidths();
-			(nc, nw) := movepast(vis, ow, x.visindex, y.visindex, p.xy.x);
+			(nc, nw) := movepast(vis, ow, c.visindex, y.visindex, p.xy.x);
 			visset(nc, nw);
 		}
-	} else if(x.moder.contains(ptrdown.xy)) {
+	} else if(c.moder.contains(ptrdown.xy)) {
 		case ptrdown.buttons {
 		B1 =>	modetoggle();
-		B3 =>	coltoggle(x);
 		}
-	} else if((j := rectindex(x.tagwins, ptrdown.xy)) >= 0) {
-		w := x.wins[j];
-		if(x == y) {
-			if(col != x || x.win != w || x.mode == Msingle)
-				focus(x, w, 0);
+	} else if((j := rectindex(c.tagwins, ptrdown.xy)) >= 0) {
+		w := c.wins[j];
+		if(c == y) {
+			if(col != c || c.win != w || c.mode == Msingle)
+				focus(c, w, 0);
 			else
 				case ptrdown.buttons {
-				B1 =>	winbigger(x, w, zeropt, 0, x.r.dy()/6);
-				B2 =>	winmax(x, w);
-				B3 =>	winsingle(x, w);
+				B1 =>	winbigger(c, w, zeropt, 0, c.r.dy()/6);
+				B2 =>	winmax(c, w);
+				B3 =>	winsingle(c, w);
 				}
 		} else if(ptrdown.buttons == B1) {
-			winmovecol(w, x, y, p.xy.y-tagsrect.dy());
-			ptrensure(x, w);
+			winmovecol(w, c, y, p.xy.y-tagsrect.dy());
+			ptrensure(c, w);
 		}
-	} else if((j = rectindex(x.tagcmds, ptrdown.xy)) >= 0 && ptrdown.buttons == B2) {
-		(nil, cmd) := *l2a(tagcmds)[j];
-		spawn run(list of {"sh", "-nc", cmd});
-	} 
+	} else if(p.xy.x >= c.sr.min.x) {
+		x := p.xy.x-c.sr.min.x;
+		s := c.s;
+		n := len s;
+		o := 0;
+		for(i := 0; i < n; i++) {
+			no := o+tagfont.width(s[i:i+1]);
+			if(no > x)
+				break;
+			o = no;
+		}
+		case ptrdown.buttons {
+		B1 =>
+			c.cursi = i;
+			c.cursx = o;
+		B2 =>
+			cmd(s, i);
+		}
+	}
 	drawtags();
+}
+
+cmd(s: string, i: int)
+{
+	if(i >= len s)
+		i = len s-1;
+	if(str->in(s[i], " \t\n"))
+		return;
+	for(b := i; b-1 >= 0 && !str->in(s[b-1], " \t\n"); b--)
+		{}
+	for(e := i; e+1 < len s && !str->in(s[e+1], " \t\n"); e++)
+		{}
+	s = s[b:e+1];
+	case s {
+	"Hide" =>
+		coltoggle(col, 1);
+	"Cols" =>
+		colsnonempty();
+	* =>
+		spawn run(list of {"sh", "-nc", s});
+	}
+}
+
+Ctl: con -16r60;
+tagkey(c: ref Col, x: int)
+{
+	s := c.s;
+	i := c.cursi;
+	case x {
+	Ctl+'h' =>
+		if(i > 0) {
+			c.cursx -= tagfont.width(s[i-1:i]);
+			c.s = s[:i-1]+s[i:];
+			c.cursi--;
+		}
+	Ctl+'u' =>
+		c.cursi = 0;
+		c.cursx = 0;
+		c.s = "";
+	Ctl+'w' =>
+		Break: con "^a-zA-Z0-9";
+		for(b := i; b-1 >= 0 && str->in(s[b-1], Break); b--)
+			{}
+		for(; b-1 >= 0 && !str->in(s[b-1], Break); b--)
+			{}
+		c.cursx -= tagfont.width(s[b:i]);
+		c.cursi = b;
+		c.s = s[:b]+s[i:];
+	Ctl+'a' =>
+		c.cursx = 0;
+		c.cursi = 0;
+	Ctl+'e' =>
+		c.cursx = c.sr.dx();
+		c.cursi = len s;
+	kb->Left =>
+		if(i > 0) {
+			c.cursx -= tagfont.width(s[i-1:i]);
+			c.cursi--;
+		}
+	kb->Right =>
+		if(i+1 <= len s) {
+			c.cursx += tagfont.width(s[i:i+1]);
+			c.cursi++;
+		}
+	* =>
+		c.cursi += 1;
+		ns := "";
+		ns[len ns] = x;
+		c.cursx += tagfont.width(ns);
+		c.s = s[:i]+ns+s[i:];
+	}
+	drawtag(c);
 }
 
 key(x: int)
@@ -612,30 +697,16 @@ key(x: int)
 		# shift 1-9
 		ops := array[] of {"!", "@", "#", "$", "%", "^", "&", "*", "("};
 		ci := findstr(ops, sprint("%c", x));
-		if(ci >= 0) {
-			cfg := cfgget();
-			c := cols[ci];
-			coltoggle(c);
-			cfgset(cfg);
-			if(c.visindex >= 0) {
-				focus(c, c.win, 1);
-				if(c.win != nil) {
-					r := c.win.wantr;
-					r.max.y = r.min.y+10;
-					ptrset(rectmid(r));
-				}
-			}
-		} else
+		if(ci >= 0)
+			coltoggle(cols[ci], 1);
+		else
 			say(sprint("unknown key %c/%#x", x, x));
 	Modchar =>
 		cfg := cfgget();
 		colswitch();
 		cfgset(cfg);
 	'0' =>
-		cfg := cfgget();
-		colnonempty();
-		cfgset(cfg);
-		ptrensure(col, col.win);
+		colsnonempty();
 	'1' to '9' =>
 		cfg := cfgget();
 		colsingle(cols[x-'1']);
@@ -701,7 +772,7 @@ key(x: int)
 		if(col.win != nil)
 			windrop(col.win);
 	'c' =>
-		spawn run0();
+		spawn run(list of {"sh", "-nc", program});
 	'd' =>
 		dflag = !dflag;
 	'D' =>
@@ -726,6 +797,14 @@ dump()
 			warn(sprint("\twin, index %d, tag %q, fid %d, resizing %d, fixedorigin %d, wantr %s, haver %s", w.index, w.tag, w.fid, w.resizing, w.fixedorigin, r2s(w.wantr), r));
 		}
 	}
+}
+
+colsnonempty()
+{
+	cfg := cfgget();
+	colnonempty();
+	cfgset(cfg);
+	ptrensure(col, col.win);
 }
 
 winadj(after: int): ref Win
@@ -816,7 +895,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		if(w.img == nil)
 			error("reshape of non-\".\" without image");
 		r := Rect((int a[2], int a[3]), (int a[4], int a[5]));
-		ni := drawctxt.screen.newwindow(r, draw->Refnone, draw->Grey);
+		ni := drawctxt.screen.newwindow(r, draw->Refnone, Draw->Nofill);
 		if(ni == nil)
 			error(sprint("new window: %r"));
 		#ni.flush(draw->Flushoff);
@@ -1259,7 +1338,7 @@ resize()
 			winctl(w, "!size . -1 0 0");
 		}
 		if(len c.wins == 0 && c.visindex >= 0)
-			drawctxt.screen.image.draw(c.r, drawctxt.display.color(draw->Grey), nil, zeropt);
+			drawctxt.screen.image.draw(c.r, drawctxt.display.color(Colbgcolor), nil, zeropt);
 	}
 }
 
@@ -1320,13 +1399,13 @@ drawtags()
 
 drawtag(c: ref Col)
 {
-	bg := drawctxt.display.color(Tagcolor);
-	selbg := drawctxt.display.color(Tagselcolor);
-	boxc := drawctxt.display.color(Tagselcolor);
-	white := drawctxt.display.white;
+	bg := drawctxt.display.color(Tagbgcolor);
+	selbg := drawctxt.display.color(Tagselbgcolor);
+	boxc := drawctxt.display.color(Boxcolor);
+	fg := drawctxt.display.color(Tagfgcolor);
 
 	if(c.tag == nil || c.tagr.min.x != c.tag.r.min.x || c.tagr.max.x != c.tag.r.max.x) {
-		ntag := drawctxt.screen.newwindow(c.tagr, draw->Refnone, Tagcolor);
+		ntag := drawctxt.screen.newwindow(c.tagr, draw->Refnone, Tagbgcolor);
 		if(ntag == nil)
 			return warn(sprint("newwindow for tag: %r"));
 		else
@@ -1341,13 +1420,13 @@ drawtag(c: ref Col)
 	if(col == c)
 		b = selbg;
 	p := Point(box.max.x+3, c.tag.r.min.y+1);
-	p = c.tag.text(p, white, zeropt, tagfont, " ");
-	p = c.tag.textbg(p, white, zeropt, tagfont, sprint("%d ", c.index+1), b, zeropt);
+	p = c.tag.text(p, fg, zeropt, tagfont, " ");
+	p = c.tag.textbg(p, fg, zeropt, tagfont, sprint("%d ", c.index+1), b, zeropt);
 	c.moder = Rect((p.x, c.tagr.min.y), (0, c.tagr.max.y));
 	m := modes[c.mode];
-	p = c.tag.textbg(p, white, zeropt, tagfont, m, b, zeropt);
+	p = c.tag.textbg(p, fg, zeropt, tagfont, m, b, zeropt);
 	s := "       ";
-	p = c.tag.text(p, white, zeropt, tagfont, s[len m:]);
+	p = c.tag.text(p, fg, zeropt, tagfont, s[len m:]);
 	c.moder.max.x = p.x;
 	c.tagwins = array[len c.wins] of Rect;
 	slackwidth := tagfont.width(" ")/2;
@@ -1355,26 +1434,28 @@ drawtag(c: ref Col)
 		b = bg;
 		if(c.win == c.wins[i])
 			b = selbg;
-		p = c.tag.textbg(p, white, zeropt, tagfont, " ", bg, zeropt);
+		p = c.tag.textbg(p, fg, zeropt, tagfont, " ", bg, zeropt);
 		c.tagwins[i] = c.tagr;
 		c.tagwins[i].min.x = p.x-slackwidth;
-		p = c.tag.textbg(p, white, zeropt, tagfont, sprint("%d", i), b, zeropt);
+		p = c.tag.textbg(p, fg, zeropt, tagfont, sprint("%d", i), b, zeropt);
 		c.tagwins[i].max.x = p.x+slackwidth;
 	}
+	p = c.tag.textbg(p, fg, zeropt, tagfont, " ", bg, zeropt);
 
-	c.tagcmds = array[len tagcmds] of Rect;
-	i = 0;
-	pad := "  ";
-	for(l := tagcmds; l != nil; l = tl l) {
-		(tag, nil) := *hd l;
-		p = c.tag.textbg(p, white, zeropt, tagfont, pad, bg, zeropt);
-		pad = " ";
-		c.tagcmds[i] = c.tagr;
-		c.tagcmds[i].min.x = p.x-slackwidth;
-		p = c.tag.textbg(p, white, zeropt, tagfont, tag, bg, zeropt);
-		c.tagcmds[i].max.x = p.x+slackwidth;
-		i += 1;
-	}
+	c.sr.min = Point(p.x, c.tagr.min.y);
+	p = c.tag.textbg(p, fg, zeropt, tagfont, c.s, bg, zeropt);
+	c.sr.max = Point(p.x, c.tagr.max.y);
+
+	# draw cursor
+	miny := c.tagr.min.y;
+	maxy := c.tagr.max.y;
+	cx := c.sr.min.x+c.cursx;
+	cr := Rect((cx, miny), (cx+1, maxy));
+	cbr0 := Rect((cx-1, miny), (cx+2, miny+2));
+	cbr1 := cbr0.addpt(Point(0, c.tagr.dy()-2));
+	c.tag.draw(cr, fg, nil, zeropt);
+	c.tag.draw(cbr0, fg, nil, zeropt);
+	c.tag.draw(cbr1, fg, nil, zeropt);
 }
 
 # place focus on col/win where ptr is
@@ -1594,7 +1675,7 @@ winunhide(c: ref Col, w: ref Win)
 	say(sprint("unhide, c.index %d, c.visindex %d", c.index, c.visindex));
 	if(c.visindex < 0) {
 		say("toggling col");
-		coltoggle(c);
+		coltoggle(c, 0);
 	}
 	if(c.mode == Msingle) {
 		winsingle(c, w);
@@ -1708,8 +1789,24 @@ colswitch()
 	focus(othercfg.col, w, 1);
 }
 
+coltoggle(c: ref Col, givefocus: int)
+{
+	cfg := cfgget();
+	if(coltoggle0(c))
+		cfgset(cfg);
+	if(c.visindex >= 0 && givefocus) {
+		focus(c, c.win, 1);
+		if(c.win != nil) {
+			r := c.win.wantr;
+			r.max.y = r.min.y+10;
+			ptrset(rectmid(r));
+		}
+	}
+}
+
 # toggle visibility of c
-coltoggle(c: ref Col)
+# return true if visibility of col has changed
+coltoggle0(c: ref Col): int
 {
 	say(sprint("toggle col %d", c.index));
 	i := c.visindex;
@@ -1725,10 +1822,10 @@ coltoggle(c: ref Col)
 		nw := concati(w[:ci+1], concati(array[] of {take}, w[ci+1:]));
 		visset(nv, nw);
 		ptrensure(col, col.win);
-		return;
+		return 1;
 	}
 	if(len vis == 1)
-		return;  # cannot remove last col
+		return 0;  # cannot remove last col
 
 	# remove col
 	w := getviswidths();
@@ -1740,6 +1837,7 @@ coltoggle(c: ref Col)
 	nw := concati(w[:i], w[i+1:]);
 	visset(nv, nw);
 	focusptr();
+	return 1;
 }
 
 # show non-empty columns only

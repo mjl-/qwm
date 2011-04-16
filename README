@@ -36,6 +36,10 @@ if you want to use button2 and button3 clicks on title bars of
 windows, look at the changes in the branch titlebar-maxfull, in the
 inferno-os clone "mechiel-inferno-os".
 
+if you see flashes when resizing windows, or a black background on
+empty columns, and it annoys you, use the changes in the branch
+"screennofill".
+
 it's also advisable to "bind -b /icons/tinytk /icons/tk", to make the
 title bars a bit less big.
 
@@ -62,4 +66,3 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 - change how Screens deal with fill:  use SoverD instead of S when drawing, so we can use Nofill and get a no-op, instead of a black screen
 - make it possible to run in existing draw context
 - floating mode?
-- allow user to edit text in tag, with b2 for execute?  remove -t tag cmd
