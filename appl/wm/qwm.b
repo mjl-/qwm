@@ -2025,7 +2025,8 @@ modestack()
 	}
 	setheights(col, h);
 	resize();
-	ptrensure(col, col.win);
+	if(col.win != nil)
+		ptrensure(col, col.win);
 }
 
 modetoggle()
