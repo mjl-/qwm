@@ -59,7 +59,6 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 # todo
 
-- make column resizing smarter.
 - thorough design & code review.  lots has changed.
 
 - see if it's fixable that charon crashes when it gets a small image (with negative dy)

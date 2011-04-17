@@ -62,6 +62,7 @@ Win: adt {
 	fixedorigin:	int;
 	tagwins:	list of ref (string, ref Image);  # non-"." windows/tags
 	dirty:		int;	# whether needs to be redrawn
+	ptroff:		Point;	# to add to pointers for window
 };
 wingen := 1;	# tag is "w"+wingen
 
@@ -519,8 +520,11 @@ mouse(p: ref Pointer)
 				drawtags();
 			}
 		}
-		if(col.win != nil && col.win.started&Sptr)
-			col.win.nbwm.ptr <-= p;
+		if(col.win != nil && col.win.started&Sptr) {
+			mp := ref *p;
+			mp.xy = mp.xy.add(col.win.ptroff);
+			col.win.nbwm.ptr <-= mp;
+		}
 	}
 	if(!ptrprev.buttons && p.buttons)
 		ptrdown = p;
@@ -998,6 +1002,7 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		# dragging window started, ignore reqid, startx & starty are start locations
 		narg(cmd, 4, len a);
 		pt := Point(int a[2], int a[3]);
+		pt = pt.sub(w.ptroff);
 		moving = ref (ptrprev, w, wc, buf, pt);
 		w.resizing = 1;
 		return;
@@ -1116,6 +1121,7 @@ reshape(w: ref Win): string
 	i := drawctxt.screen.newwindow(w.wantr, draw->Refnone, draw->Nofill);
 	if(i == nil)
 		return sprint("newwindow %s: %r", r2s(w.wantr));
+	w.ptroff = zeropt;
 	w.img = i;
 	w.haver = w.wantr;
 	w.resizing = 0;
@@ -1138,7 +1144,7 @@ winmk(fid: int): ref Win
 	nbwm.ctl = chan of string;
 	nbwm.images = chan of ref Image;
 
-	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, 0, 0, nil, 0);
+	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, 0, 0, nil, 0, zeropt);
 
 	pidc := chan of int;
 	spawn chanbuf(nbwm.ptr, wm.ptr, pidc);
@@ -1421,8 +1427,10 @@ resize()
 			if(c.mode == Mstack && w.wantr.min.x == w.haver.min.x || c.mode == Msingle && w.wantr.min.x >= p.x) {
 				if(w.img.origin(w.img.r.min, w.wantr.min) != 1)
 					warn(sprint("setting origin: %r"));
-				else
+				else {
+					w.ptroff = w.ptroff.add(w.haver.min.sub(w.wantr.min));
 					w.haver = w.wantr;
+				}
 				continue;
 			}
 
