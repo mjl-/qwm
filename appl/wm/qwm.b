@@ -445,9 +445,17 @@ ptrboxpt(c: ref Col): Point
 	return b.min.add((b.dx()/2, b.dy()/2));
 }
 
-ptrbox(c: ref Col)
+ptrsetbox(c: ref Col)
 {
 	ptrset(ptrboxpt(c));
+}
+
+ptrsettag(c: ref Col)
+{
+	(nil, i1) := order(c.sp.i0, c.sp.i1);
+	x := min(c.r.max.x-1, c.sr.min.x+tagfont.width(c.s[:i1]));
+	y := c.sr.min.y+c.sr.dy()/2;
+	ptrset(Point(x, y));
 }
 
 ptrset(xy: Point)
@@ -633,7 +641,7 @@ ptrtag(p: ref Pointer)
 				}
 			else {
 				colsetleft(c, p.xy.x);
-				ptrbox(c);
+				ptrsetbox(c);
 			}
 		} else if(ptrdown.buttons == B1) {
 			ow := getviswidths();
@@ -1588,7 +1596,7 @@ drawtag(c: ref Col)
 }
 
 # place focus on col/win where ptr is
-focusptr()
+ptrfocus()
 {
 	(c, w) := winfindpt(ptrprev.xy);
 	if(w == nil && len c.wins != 0)
@@ -1599,10 +1607,8 @@ focusptr()
 # if ptr is not on w, move it there.  if win is nil, make sure ptr is on c.
 ptrensure(c: ref Col, w: ref Win)
 {
-	if(w == nil) {
-		say(sprint("ptrensure, c %d, colbox %s, mid %s", c.index, r2s(colbox(c)), p2s(rectmid(colbox(c)))));
-		return ptrset(rectmid(colbox(c)));
-	}
+	if(w == nil)
+		return ptrsettag(c);
 	(x, y) := ptrprev.xy;
 	if(w.wantr.contains((x,y)))
 		return;
@@ -1851,7 +1857,7 @@ colbigger(c: ref Col, warp: int)
 	setviswidths(w);
 	resize();
 	if(warp && ox != c.tagr.min.x)
-		ptrbox(c);
+		ptrsetbox(c);
 }
 
 # make col as big as possible, leaving max Colmin for the others
@@ -1871,7 +1877,7 @@ colmax(c: ref Col, warp: int)
 	setviswidths(w);
 	resize();
 	if(warp && ox != c.tagr.min.x)
-		ptrbox(c);
+		ptrsetbox(c);
 }
 
 cfgget(): ref Cfg
@@ -1965,7 +1971,7 @@ coltoggle0(c: ref Col): int
 	nv := concat(vis[:i], vis[i+1:]);
 	nw := concati(w[:i], w[i+1:]);
 	visset(nv, nw);
-	focusptr();
+	ptrfocus();
 	return 1;
 }
 
