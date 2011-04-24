@@ -12,6 +12,7 @@ SYSMODULES=\
 	keyring.m\
 	string.m\
 	sys.m\
+	tables.m\
 	tk.m\
 	tkclient.m\
 

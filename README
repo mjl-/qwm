@@ -61,7 +61,6 @@ mechiel lukkien, reachable at mechiel@ueber.net.
 
 - thorough design & code review.  lots has changed.
 
-- see if it's fixable that charon crashes when it gets a small image (with negative dy)
 - change how Screens deal with fill:  use SoverD instead of S when drawing, so we can use Nofill and get a no-op, instead of a black screen
 - make it possible to run in existing draw context
 - floating mode?

@@ -18,6 +18,9 @@ include "keyboard.m";
 	kb: Keyboard;
 include "sh.m";
 	sh: Sh;
+include "tables.m";
+	tables: Tables;
+	Strhash: import tables;
 
 Qwm: module {
 	init:	fn(nil: ref Context, args: list of string);
@@ -60,7 +63,7 @@ Win: adt {
 	haver:	Rect;		# rect of img.  unlike img.r, which always starts at 0.0
 	resizing:	int;	# whether !size msg sent or will be sent soon
 	fixedorigin:	int;
-	tagwins:	list of ref (string, ref Image);  # non-"." windows/tags
+	tagtab:		ref Strhash[ref (ref Image, Rect)];  # non-"." windows/tags
 	dirty:		int;	# whether needs to be redrawn
 	ptroff:		Point;	# to add to pointers for window
 };
@@ -132,6 +135,7 @@ init(ctxt: ref Context, args: list of string)
 	devpointer = load Devpointer Devpointer->PATH;
 	devpointer->init();
 	sh = load Sh Sh->PATH;
+	tables = load Tables Tables->PATH;
 
 	arg->init(args);
 	arg->setusage(arg->progname()+" [-d] [profile]");
@@ -995,7 +999,8 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 		if(ni == nil)
 			error(sprint("new window: %r"));
 		#ni.flush(draw->Flushoff);
-		w.tagwins = ref (tag, ni)::tagdel(w.tagwins, tag);
+		w.tagtab.del(tag);
+		w.tagtab.add(tag, ref (ni, r));
 		rimg = ni;
 	"!move" =>
 		# !move tag reqid startx starty
@@ -1035,12 +1040,26 @@ ctlwrite(w: ref Win, buf: array of byte, wc: chan of (int, string))
 	"delete" =>
 		narg(cmd, 1, len a);
 		tag := a[0];
-		w.tagwins = tagdel(w.tagwins, tag);
+		if(tag == ".")
+			break;
+		t := w.tagtab.find(tag);
+		w.tagtab.del(tag);
+		if(t == nil) {
+			warn("missing tag?");
+			break;
+		}
+		(nil, r) := *t;
 
-		# force redraw by app by sending it its current image
-		if(!w.resizing) {
-			w.resizing = 1;
-			winctl(w, "!size . -1 0 0");
+		# force redraws for windows we were over
+		for(i := 0; i < len vis; i++) {
+			cc := vis[i];
+			for(j := 0; j < len cc.wins; j++) {
+				ww := cc.wins[j];
+				if(!ww.resizing && r.clip(ww.wantr).t1) {
+					ww.resizing = 1;
+					winctl(ww, "!size . -1 0 0");
+				}
+			}
 		}
 	"fixedorigin" =>
 		# don't change origin when moving, give new image entirely
@@ -1144,7 +1163,9 @@ winmk(fid: int): ref Win
 	nbwm.ctl = chan of string;
 	nbwm.images = chan of ref Image;
 
-	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, 0, 0, nil, 0, zeropt);
+	tagtab: ref Strhash[ref (ref Image, Rect)];
+	tagtab = tagtab.new(1, nil);
+	w := ref Win(-1, -1, sprint("w%d", wingen++), fid, wm, nbwm, nil, 0, nil, zerorect, zerorect, 0, 0, tagtab, 0, zeropt);
 
 	pidc := chan of int;
 	spawn chanbuf(nbwm.ptr, wm.ptr, pidc);
@@ -2148,18 +2169,6 @@ sum(a: array of int): int
 	for(i := 0; i < len a; i++)
 		v += a[i];
 	return v;
-}
-
-tagdel(l: list of ref (string, ref Image), s: string): list of ref (string, ref Image)
-{
-	r: list of ref (string, ref Image);
-	rem := 0;
-	for(; l != nil; l = tl l)
-		if((hd l).t0 != s || rem)
-			r = hd l::r;
-		else
-			rem = 1;
-	return r;
 }
 
 order(a, b: int): (int, int)
